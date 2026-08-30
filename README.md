@@ -60,9 +60,17 @@ The **Monitor captured audio** option routes the captured stream back to the spe
 
 ```text
 .
-├── index.html   # Complete application: markup, styles, JavaScript, and GLSL
-└── README.md    # Setup and usage documentation
+├── index.html                     # Application markup and CDN import map
+├── styles.css                     # Glassmorphism UI and responsive layout
+├── src/
+│   ├── main.js                    # Three.js scene, audio engine, and controls
+│   └── shaders/
+│       ├── particle.vert.glsl     # Audio-reactive particle vertex shader
+│       └── particle.frag.glsl     # Glowing particle fragment shader
+└── README.md                      # Setup and usage documentation
 ```
+
+The project intentionally has no build step. `src/main.js` loads the shader files with `fetch`, so the app must be served over `localhost` or HTTPS.
 
 ## Browser notes
 
