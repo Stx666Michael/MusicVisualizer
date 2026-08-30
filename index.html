@@ -1,0 +1,1381 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050611">
+  <title>Resonance Field - Audio-Reactive Particle Visualizer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --accent: #ff38d1;
+      --accent-soft: rgba(255, 56, 209, 0.3);
+      --accent-strong: #a7f5ff;
+      --ink: #f5f7ff;
+      --muted: #8e95b6;
+      --panel: rgba(11, 13, 32, 0.7);
+      --panel-border: rgba(213, 221, 255, 0.16);
+      --track: rgba(255, 255, 255, 0.13);
+      --canvas-fade: #050611;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(47, 31, 108, 0.25), transparent 42%),
+        radial-gradient(circle at 80% 10%, var(--accent-soft), transparent 30%),
+        var(--canvas-fade);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      position: relative;
+    }
+
+    #app,
+    #app canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #app {
+      z-index: 0;
+    }
+
+    #app canvas {
+      display: block;
+      outline: none;
+    }
+
+    .vignette {
+      position: fixed;
+      z-index: 1;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at center, transparent 36%, rgba(1, 2, 10, 0.48) 100%),
+        linear-gradient(115deg, rgba(0, 0, 0, 0.18), transparent 38%, rgba(0, 0, 0, 0.3));
+      mix-blend-mode: multiply;
+    }
+
+    .hud {
+      position: fixed;
+      z-index: 2;
+      top: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      width: min(420px, calc(100vw - 48px));
+      max-height: calc(100vh - 48px);
+      padding: 23px;
+      overflow-y: auto;
+      border: 1px solid var(--panel-border);
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgba(24, 28, 61, 0.77), var(--panel));
+      box-shadow:
+        0 24px 80px rgba(0, 0, 0, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 70px var(--accent-soft);
+      backdrop-filter: blur(24px) saturate(135%);
+      -webkit-backdrop-filter: blur(24px) saturate(135%);
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+    }
+
+    .brand {
+      display: grid;
+      gap: 5px;
+    }
+
+    .eyebrow,
+    .section-heading,
+    .audio-readout,
+    .footer {
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .eyebrow {
+      color: var(--accent-strong);
+      text-shadow: 0 0 18px var(--accent-soft);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(27px, 5vw, 35px);
+      font-weight: 650;
+      letter-spacing: -0.045em;
+      line-height: 1;
+    }
+
+    .brand p {
+      max-width: 320px;
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .control-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 9px;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+    }
+
+    .button {
+      min-height: 39px;
+      padding: 9px 13px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.075);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.035em;
+      transition:
+        border-color 160ms ease,
+        background 160ms ease,
+        box-shadow 160ms ease,
+        transform 160ms ease,
+        opacity 160ms ease;
+    }
+
+    .button.primary {
+      border-color: transparent;
+      background: linear-gradient(115deg, var(--accent), var(--accent-strong));
+      color: #0a0a18;
+      box-shadow: 0 8px 26px var(--accent-soft);
+    }
+
+    .button:hover:not(:disabled),
+    .theme-button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: var(--accent);
+      box-shadow: 0 7px 24px var(--accent-soft);
+    }
+
+    .button:active:not(:disabled),
+    .theme-button:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .button:focus-visible,
+    .theme-button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--accent-strong);
+      outline-offset: 2px;
+    }
+
+    .button:disabled {
+      cursor: not-allowed;
+      opacity: 0.4;
+    }
+
+    .hint {
+      margin: -8px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .audio-readout {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 24px;
+      color: var(--muted);
+    }
+
+    .audio-dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: #69708f;
+      box-shadow: 0 0 0 rgba(105, 112, 143, 0);
+      transition: background 180ms ease, box-shadow 180ms ease;
+    }
+
+    .audio-dot[data-state="ready"] {
+      background: #72ffb2;
+      box-shadow: 0 0 15px rgba(114, 255, 178, 0.8);
+      animation: breathe 1.5s ease-in-out infinite;
+    }
+
+    .audio-dot[data-state="busy"] {
+      background: #ffd468;
+      box-shadow: 0 0 15px rgba(255, 212, 104, 0.8);
+      animation: breathe 0.8s ease-in-out infinite;
+    }
+
+    .audio-dot[data-state="error"] {
+      background: #ff6f99;
+      box-shadow: 0 0 15px rgba(255, 111, 153, 0.8);
+    }
+
+    .source-label {
+      margin-left: auto;
+      max-width: 46%;
+      overflow: hidden;
+      color: rgba(235, 239, 255, 0.6);
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-overflow: ellipsis;
+      text-transform: none;
+      white-space: nowrap;
+    }
+
+    .notice {
+      padding: 11px 12px;
+      border: 1px solid rgba(171, 184, 255, 0.15);
+      border-radius: 12px;
+      background: rgba(113, 129, 255, 0.08);
+      color: #bfc7eb;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .notice.warning {
+      border-color: rgba(255, 212, 104, 0.25);
+      background: rgba(255, 212, 104, 0.08);
+      color: #ffe5a1;
+    }
+
+    .notice.error {
+      border-color: rgba(255, 111, 153, 0.3);
+      background: rgba(255, 111, 153, 0.09);
+      color: #ffb8cc;
+    }
+
+    .section {
+      display: grid;
+      gap: 12px;
+      padding-top: 17px;
+      border-top: 1px solid rgba(213, 221, 255, 0.1);
+    }
+
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #dce1fb;
+    }
+
+    .section-heading span:last-child {
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+    }
+
+    .slider-row {
+      display: grid;
+      grid-template-columns: 66px minmax(0, 1fr) 42px;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .slider-label,
+    .slider-value {
+      color: #c9cfea;
+      font-size: 11px;
+    }
+
+    .slider-value {
+      color: var(--accent-strong);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 18px;
+      margin: 0;
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 3px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--track));
+    }
+
+    input[type="range"]::-moz-range-track {
+      height: 3px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--track));
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      width: 13px;
+      height: 13px;
+      margin-top: -5px;
+      border: 2px solid #eaf5ff;
+      border-radius: 50%;
+      appearance: none;
+      -webkit-appearance: none;
+      background: var(--accent);
+      box-shadow: 0 0 13px var(--accent);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 10px;
+      height: 10px;
+      border: 2px solid #eaf5ff;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 13px var(--accent);
+    }
+
+    .monitor {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .monitor input {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 auto;
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    .monitor strong {
+      color: #dce1fb;
+      font-weight: 600;
+    }
+
+    .themes {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .theme-button {
+      position: relative;
+      min-height: 54px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.055);
+      color: #d8ddf9;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+      transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease,
+        transform 160ms ease;
+    }
+
+    .theme-button::before {
+      position: absolute;
+      inset: 0 0 auto;
+      height: 4px;
+      content: "";
+      background: var(--theme-gradient);
+    }
+
+    .theme-button[data-theme="cyberpunk"] {
+      --theme-gradient: linear-gradient(90deg, #3f52ff, #ff2dcf);
+    }
+
+    .theme-button[data-theme="deep-space"] {
+      --theme-gradient: linear-gradient(90deg, #091645, #78baff);
+    }
+
+    .theme-button[data-theme="solar-flare"] {
+      --theme-gradient: linear-gradient(90deg, #ff4300, #ffd56a);
+    }
+
+    .theme-button[aria-pressed="true"] {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 24px var(--accent-soft), 0 0 18px var(--accent-soft);
+      color: #ffffff;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 9px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .footer strong {
+      color: var(--accent-strong);
+      font-weight: 700;
+    }
+
+    .interaction-tip {
+      position: fixed;
+      z-index: 2;
+      bottom: 20px;
+      left: 24px;
+      padding: 9px 12px;
+      border: 1px solid rgba(213, 221, 255, 0.12);
+      border-radius: 10px;
+      background: rgba(8, 10, 24, 0.44);
+      color: rgba(215, 222, 250, 0.65);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      pointer-events: none;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    @keyframes breathe {
+      0%,
+      100% {
+        opacity: 0.65;
+        transform: scale(0.86);
+      }
+
+      50% {
+        opacity: 1;
+        transform: scale(1.1);
+      }
+    }
+
+    @media (max-width: 700px) {
+      html,
+      body {
+        overflow: auto;
+      }
+
+      .hud {
+        top: 12px;
+        right: 12px;
+        left: 12px;
+        width: auto;
+        max-height: calc(100vh - 24px);
+        padding: 18px;
+        border-radius: 20px;
+      }
+
+      .interaction-tip {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="app" aria-label="3D audio-reactive particle field"></main>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <section class="hud" aria-label="Visualizer controls">
+    <header class="brand">
+      <div class="eyebrow">WebGL audio instrument</div>
+      <h1>Resonance Field</h1>
+      <p>Feed a live tab or system stream into a luminous field of 32,000 particles.</p>
+    </header>
+
+    <div class="control-row">
+      <button class="button primary" id="startCapture" type="button">Capture Browser/System Audio</button>
+      <button class="button" id="stopCapture" type="button" disabled>Stop Capture</button>
+    </div>
+
+    <p class="hint">Choose a tab or screen in the browser dialog and enable <strong>Share tab audio</strong> (or system audio) when offered.</p>
+
+    <div class="audio-readout">
+      <span class="audio-dot" id="audioDot" data-state="idle" aria-hidden="true"></span>
+      <span id="statusLabel">Idle - waiting for capture</span>
+      <span class="source-label" id="sourceLabel">No audio source</span>
+    </div>
+
+    <div class="notice" id="notice" role="status" aria-live="polite">
+      Audio is off. Start a capture to make the field react.
+    </div>
+
+    <section class="section" aria-label="Audio sensitivity">
+      <div class="section-heading">
+        <span>Response</span>
+        <span>Band sensitivity</span>
+      </div>
+
+      <label class="slider-row" for="bassSensitivity">
+        <span class="slider-label">Bass</span>
+        <input id="bassSensitivity" type="range" min="0.25" max="3" step="0.05" value="1.55">
+        <span class="slider-value" id="bassValue">1.55x</span>
+      </label>
+
+      <label class="slider-row" for="midSensitivity">
+        <span class="slider-label">Mids</span>
+        <input id="midSensitivity" type="range" min="0.25" max="3" step="0.05" value="1.2">
+        <span class="slider-value" id="midValue">1.20x</span>
+      </label>
+
+      <label class="slider-row" for="trebleSensitivity">
+        <span class="slider-label">Treble</span>
+        <input id="trebleSensitivity" type="range" min="0.25" max="3" step="0.05" value="1.4">
+        <span class="slider-value" id="trebleValue">1.40x</span>
+      </label>
+
+      <label class="monitor" for="monitorAudio">
+        <input id="monitorAudio" type="checkbox" checked>
+        <span><strong>Monitor captured audio</strong> Route the captured stream back to your speakers. Turn this off if your browser is already playing the tab locally and you hear an echo.</span>
+      </label>
+    </section>
+
+    <section class="section" aria-label="Visual themes">
+      <div class="section-heading">
+        <span>Atmosphere</span>
+        <span>Visual theme</span>
+      </div>
+      <div class="themes">
+        <button class="theme-button" data-theme="cyberpunk" type="button" aria-pressed="true">Cyberpunk</button>
+        <button class="theme-button" data-theme="deep-space" type="button" aria-pressed="false">Deep Space</button>
+        <button class="theme-button" data-theme="solar-flare" type="button" aria-pressed="false">Solar Flare</button>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span><strong id="fpsValue">0 FPS</strong> performance</span>
+      <span>32,000 points</span>
+    </footer>
+  </section>
+
+  <div class="interaction-tip">Drag to orbit - scroll to zoom - right-drag to pan</div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+    import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+    import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+
+    const PARTICLE_COUNT = 32000;
+    const MAX_PIXEL_RATIO = 2;
+
+    const ui = {
+      startCapture: document.getElementById("startCapture"),
+      stopCapture: document.getElementById("stopCapture"),
+      audioDot: document.getElementById("audioDot"),
+      statusLabel: document.getElementById("statusLabel"),
+      sourceLabel: document.getElementById("sourceLabel"),
+      notice: document.getElementById("notice"),
+      monitorAudio: document.getElementById("monitorAudio"),
+      fpsValue: document.getElementById("fpsValue"),
+      sliders: {
+        bass: document.getElementById("bassSensitivity"),
+        mid: document.getElementById("midSensitivity"),
+        treble: document.getElementById("trebleSensitivity")
+      },
+      sliderValues: {
+        bass: document.getElementById("bassValue"),
+        mid: document.getElementById("midValue"),
+        treble: document.getElementById("trebleValue")
+      },
+      themeButtons: [...document.querySelectorAll(".theme-button")]
+    };
+
+    const settings = {
+      sensitivity: {
+        bass: Number(ui.sliders.bass.value),
+        mid: Number(ui.sliders.mid.value),
+        treble: Number(ui.sliders.treble.value)
+      },
+      audio: {
+        bass: 0,
+        mid: 0,
+        treble: 0,
+        previousBass: 0,
+        impulse: 0
+      }
+    };
+
+    let captureStream = null;
+    let audioContext = null;
+    let mediaSource = null;
+    let analyser = null;
+    let monitorGain = null;
+    let frequencyData = null;
+    let captureBusy = false;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0.05, 4.7);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      powerPreference: "high-performance"
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.domElement.setAttribute("aria-label", "Interactive audio-reactive particle visualizer");
+    document.getElementById("app").appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.055;
+    controls.enablePan = true;
+    controls.minDistance = 2.25;
+    controls.maxDistance = 11;
+    controls.target.set(0, 0, 0);
+
+    const renderPass = new RenderPass(scene, camera);
+    renderPass.clearAlpha = 0;
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      1.05,
+      0.72,
+      0.06
+    );
+    const composer = new EffectComposer(renderer);
+    composer.addPass(renderPass);
+    composer.addPass(bloomPass);
+
+    function createParticleGeometry(count) {
+      const positions = new Float32Array(count * 3);
+      const randoms = new Float32Array(count * 3);
+      const sizes = new Float32Array(count);
+
+      for (let index = 0; index < count; index += 1) {
+        const offset = index * 3;
+        const directionY = 1 - Math.random() * 2;
+        const directionRadius = Math.sqrt(1 - directionY * directionY);
+        const angle = Math.random() * Math.PI * 2;
+        const shellBias = Math.pow(Math.random(), 0.42);
+        const radius = 0.12 + shellBias * 1.22;
+
+        positions[offset] = Math.cos(angle) * directionRadius * radius;
+        positions[offset + 1] = directionY * radius;
+        positions[offset + 2] = Math.sin(angle) * directionRadius * radius;
+
+        randoms[offset] = Math.random();
+        randoms[offset + 1] = Math.random();
+        randoms[offset + 2] = Math.random();
+        sizes[index] = 0.62 + Math.random() * 1.18;
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute("aRandom", new THREE.BufferAttribute(randoms, 3));
+      geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
+      return geometry;
+    }
+
+    // Ashima-style 3D simplex noise keeps the organic motion entirely on the GPU.
+    const vertexShader = `
+      precision highp float;
+
+      uniform float uTime;
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uTreble;
+      uniform float uImpulse;
+      uniform float uScale;
+      uniform float uPixelRatio;
+      uniform float uPointSize;
+
+      attribute vec3 aRandom;
+      attribute float aSize;
+
+      varying float vDisplacement;
+      varying float vVelocity;
+      varying float vAudioMix;
+      varying float vDepth;
+
+      vec3 mod289(vec3 value) {
+        return value - floor(value * (1.0 / 289.0)) * 289.0;
+      }
+
+      vec4 mod289(vec4 value) {
+        return value - floor(value * (1.0 / 289.0)) * 289.0;
+      }
+
+      vec4 permute(vec4 value) {
+        return mod289(((value * 34.0) + 1.0) * value);
+      }
+
+      vec4 taylorInvSqrt(vec4 value) {
+        return 1.79284291400159 - 0.85373472095314 * value;
+      }
+
+      float snoise(vec3 value) {
+        const vec2 corner = vec2(1.0 / 6.0, 1.0 / 3.0);
+        const vec4 simplex = vec4(0.0, 0.5, 1.0, 2.0);
+
+        vec3 cell = floor(value + dot(value, corner.yyy));
+        vec3 local = value - cell + dot(cell, corner.xxx);
+        vec3 greater = step(local.yzx, local.xyz);
+        vec3 lesser = 1.0 - greater;
+        vec3 first = min(greater.xyz, lesser.zxy);
+        vec3 second = max(greater.xyz, lesser.zxy);
+        vec3 local1 = local - first + corner.xxx;
+        vec3 local2 = local - second + corner.yyy;
+        vec3 local3 = local - simplex.yyy;
+
+        cell = mod289(cell);
+        vec4 permutation = permute(
+          permute(
+            permute(cell.z + vec4(0.0, first.z, second.z, 1.0)) +
+            cell.y + vec4(0.0, first.y, second.y, 1.0)
+          ) +
+          cell.x + vec4(0.0, first.x, second.x, 1.0)
+        );
+
+        const float inverseSeven = 0.142857142857;
+        vec3 noiseScale = inverseSeven * simplex.wyz - simplex.xzx;
+        vec4 gradientIndex = permutation - 49.0 * floor(permutation * noiseScale.z * noiseScale.z);
+        vec4 gradientX = floor(gradientIndex * noiseScale.z);
+        vec4 gradientY = floor(gradientIndex - 7.0 * gradientX);
+        vec4 gradient = gradientX * noiseScale.x + noiseScale.yyyy;
+        vec4 gradient2 = gradientY * noiseScale.x + noiseScale.yyyy;
+        vec4 height = 1.0 - abs(gradient) - abs(gradient2);
+        vec4 lower = floor(gradient) * 2.0 + 1.0;
+        vec4 upper = floor(gradient2) * 2.0 + 1.0;
+        vec4 heightSign = -step(height, vec4(0.0));
+        vec4 adjustedLower = gradient.xzyw + lower.xzyw * heightSign.xxyy;
+        vec4 adjustedUpper = gradient2.xzyw + upper.xzyw * heightSign.zzww;
+
+        vec3 gradient0 = vec3(adjustedLower.xy, height.x);
+        vec3 gradient1 = vec3(adjustedLower.zw, height.y);
+        vec3 gradient2Value = vec3(adjustedUpper.xy, height.z);
+        vec3 gradient3 = vec3(adjustedUpper.zw, height.w);
+        vec4 normalization = taylorInvSqrt(vec4(
+          dot(gradient0, gradient0),
+          dot(gradient1, gradient1),
+          dot(gradient2Value, gradient2Value),
+          dot(gradient3, gradient3)
+        ));
+
+        gradient0 *= normalization.x;
+        gradient1 *= normalization.y;
+        gradient2Value *= normalization.z;
+        gradient3 *= normalization.w;
+
+        vec4 falloff = max(
+          0.6 - vec4(
+            dot(local, local),
+            dot(local1, local1),
+            dot(local2, local2),
+            dot(local3, local3)
+          ),
+          0.0
+        );
+        falloff *= falloff;
+        return 42.0 * dot(
+          falloff * falloff,
+          vec4(
+            dot(gradient0, local),
+            dot(gradient1, local1),
+            dot(gradient2Value, local2),
+            dot(gradient3, local3)
+          )
+        );
+      }
+
+      void main() {
+        vec3 basePosition = position;
+        float radius = length(basePosition);
+        vec3 normal = normalize(basePosition + vec3(0.00001));
+        float time = uTime;
+
+        float broadNoise = snoise(
+          basePosition * 1.55 + vec3(time * 0.12, -time * 0.08, time * 0.1)
+        );
+        float structureNoise = snoise(
+          basePosition * 3.4 + vec3(-time * 0.24, time * 0.18, time * 0.2)
+        );
+        vec3 flowNoise = vec3(
+          snoise(basePosition * 2.1 + vec3(time * 0.25, 0.0, 0.0)),
+          snoise(basePosition * 2.1 + vec3(0.0, time * 0.21, 0.0)),
+          snoise(basePosition * 2.1 + vec3(0.0, 0.0, time * 0.23))
+        );
+
+        float pulseWave = sin(time * (1.0 + uBass * 4.0) + radius * 4.0 + broadNoise * 2.5);
+        float bassExpansion = uBass * 0.235 + uImpulse * 0.32;
+        float midWave = broadNoise * 0.15 * uMid + pulseWave * 0.035 * uMid;
+        float trebleDetail = structureNoise * 0.045 * uTreble;
+
+        vec3 displaced = basePosition * (1.0 + bassExpansion);
+        displaced += normal * (midWave + trebleDetail);
+        displaced += flowNoise * (0.045 * uMid + 0.025 * uTreble);
+        displaced += normal * sin(time * 18.0 + aRandom.x * 62.8318) * uTreble * 0.012;
+
+        vec4 modelViewPosition = modelViewMatrix * vec4(displaced * uScale, 1.0);
+        gl_Position = projectionMatrix * modelViewPosition;
+
+        float perspectiveSize = 300.0 / max(1.0, -modelViewPosition.z);
+        gl_PointSize = clamp(
+          uPointSize * aSize * uPixelRatio * perspectiveSize * (1.0 + uTreble * 0.22),
+          1.0,
+          64.0
+        );
+
+        vDisplacement = clamp(abs(midWave) + abs(trebleDetail) * 1.4 + uImpulse * 0.2, 0.0, 1.0);
+        vVelocity = clamp(length(flowNoise) * 0.55 + abs(pulseWave) * uMid * 0.25, 0.0, 1.0);
+        vAudioMix = clamp(uBass * 0.8 + uMid * 0.35 + uTreble * 0.25, 0.0, 1.0);
+        vDepth = clamp(1.0 - (-modelViewPosition.z / 10.0), 0.0, 1.0);
+      }
+    `;
+
+    const fragmentShader = `
+      precision highp float;
+
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uTreble;
+      uniform vec3 uColorA;
+      uniform vec3 uColorB;
+      uniform vec3 uColorC;
+
+      varying float vDisplacement;
+      varying float vVelocity;
+      varying float vAudioMix;
+      varying float vDepth;
+
+      void main() {
+        vec2 centered = gl_PointCoord - 0.5;
+        float distanceFromCenter = length(centered);
+        if (distanceFromCenter > 0.5) {
+          discard;
+        }
+
+        float core = 1.0 - smoothstep(0.0, 0.23, distanceFromCenter);
+        float halo = 1.0 - smoothstep(0.08, 0.5, distanceFromCenter);
+        float glow = core * 0.9 + halo * 0.52;
+
+        float coolMix = clamp(0.2 + vVelocity * 0.72 + uMid * 0.32 + vDisplacement * 0.18, 0.0, 1.0);
+        float hotMix = clamp(uBass * 0.9 + uTreble * 0.22 + vAudioMix * 0.22 + vDisplacement * 0.3, 0.0, 1.0);
+        vec3 color = mix(uColorA, uColorB, coolMix);
+        color = mix(color, uColorC, hotMix);
+        color += uColorC * uTreble * (0.16 + core * 0.45);
+
+        float brightness = 1.05 + hotMix * 1.25 + core * 0.35;
+        float alpha = glow * (0.55 + hotMix * 0.58 + uTreble * 0.2) * (0.82 + vDepth * 0.18);
+        gl_FragColor = vec4(color * brightness, alpha);
+      }
+    `;
+
+    const uniforms = {
+      uTime: { value: 0 },
+      uBass: { value: 0 },
+      uMid: { value: 0 },
+      uTreble: { value: 0 },
+      uImpulse: { value: 0 },
+      uScale: { value: 1 },
+      uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO) },
+      uPointSize: { value: 0.055 },
+      uColorA: { value: new THREE.Color(0x121d91) },
+      uColorB: { value: new THREE.Color(0x943cff) },
+      uColorC: { value: new THREE.Color(0xffd7ff) }
+    };
+
+    const particleMaterial = new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader,
+      fragmentShader,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    const particleField = new THREE.Points(createParticleGeometry(PARTICLE_COUNT), particleMaterial);
+    scene.add(particleField);
+
+    const themes = {
+      cyberpunk: {
+        colorA: 0x101a91,
+        colorB: 0x9d34ff,
+        colorC: 0xffd7ff,
+        accent: "#ff38d1",
+        accentSoft: "rgba(255, 56, 209, 0.3)",
+        accentStrong: "#a7f5ff",
+        bloom: 1.08,
+        threshold: 0.06
+      },
+      "deep-space": {
+        colorA: 0x050a3b,
+        colorB: 0x2859d7,
+        colorC: 0xa8ddff,
+        accent: "#5d8dff",
+        accentSoft: "rgba(93, 141, 255, 0.28)",
+        accentStrong: "#b8dbff",
+        bloom: 0.9,
+        threshold: 0.09
+      },
+      "solar-flare": {
+        colorA: 0x57140a,
+        colorB: 0xff4d0a,
+        colorC: 0xfff0a6,
+        accent: "#ff6c2d",
+        accentSoft: "rgba(255, 108, 45, 0.3)",
+        accentStrong: "#ffe1a8",
+        bloom: 1.2,
+        threshold: 0.04
+      }
+    };
+
+    function applyTheme(themeName) {
+      const theme = themes[themeName];
+      if (!theme) {
+        return;
+      }
+
+      uniforms.uColorA.value.setHex(theme.colorA);
+      uniforms.uColorB.value.setHex(theme.colorB);
+      uniforms.uColorC.value.setHex(theme.colorC);
+      bloomPass.strength = theme.bloom;
+      bloomPass.threshold = theme.threshold;
+      document.documentElement.style.setProperty("--accent", theme.accent);
+      document.documentElement.style.setProperty("--accent-soft", theme.accentSoft);
+      document.documentElement.style.setProperty("--accent-strong", theme.accentStrong);
+
+      ui.themeButtons.forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.theme === themeName));
+      });
+    }
+
+    function setAudioStatus(state, label, source = "No audio source") {
+      ui.audioDot.dataset.state = state;
+      ui.statusLabel.textContent = label;
+      ui.sourceLabel.textContent = source;
+    }
+
+    function setNotice(message, tone = "info") {
+      ui.notice.className = `notice${tone === "info" ? "" : ` ${tone}`}`;
+      ui.notice.textContent = message;
+    }
+
+    function updateCaptureButtons() {
+      ui.startCapture.disabled = captureBusy || Boolean(captureStream);
+      ui.stopCapture.disabled = captureBusy || !captureStream;
+    }
+
+    function requestDisplayAudio() {
+      const mediaDevices = navigator.mediaDevices;
+      const supportedConstraints = typeof mediaDevices.getSupportedConstraints === "function"
+        ? mediaDevices.getSupportedConstraints()
+        : {};
+
+      // Newer browsers can keep the original tab audio playing. The fallback
+      // deliberately uses the broadly supported getDisplayMedia({ video: true, audio: true }).
+      if (supportedConstraints.suppressLocalAudioPlayback) {
+        return mediaDevices.getDisplayMedia({
+          video: true,
+          audio: { suppressLocalAudioPlayback: false }
+        });
+      }
+
+      return mediaDevices.getDisplayMedia({ video: true, audio: true });
+    }
+
+    function classifyCaptureError(error) {
+      const errorName = error && typeof error === "object" && "name" in error
+        ? error.name
+        : "";
+
+      if (errorName === "NotAllowedError" || errorName === "AbortError") {
+        return {
+          label: "Capture canceled",
+          message: "The sharing dialog was canceled. Choose a source and enable its tab or system audio option.",
+          tone: "warning"
+        };
+      }
+
+      if (errorName === "NotFoundError") {
+        return {
+          label: "No source selected",
+          message: "No shareable source was available. Try selecting a browser tab or a screen again.",
+          tone: "warning"
+        };
+      }
+
+      const detail = error && typeof error.message === "string" && error.message
+        ? ` ${error.message}`
+        : "";
+      return {
+        label: "Capture error",
+        message: `The audio stream could not be started.${detail}`,
+        tone: "error"
+      };
+    }
+
+    async function startCapture() {
+      if (captureBusy || captureStream) {
+        return;
+      }
+
+      if (!window.isSecureContext) {
+        setAudioStatus("error", "Secure context required");
+        setNotice("Screen and tab capture requires HTTPS or localhost. Serve this file from a local web server and try again.", "error");
+        return;
+      }
+
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== "function") {
+        setAudioStatus("error", "Capture unavailable");
+        setNotice("This browser does not expose getDisplayMedia. Use a current desktop browser with screen-capture support.", "error");
+        return;
+      }
+
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) {
+        setAudioStatus("error", "Web Audio unavailable");
+        setNotice("This browser does not expose the Web Audio API required for live analysis.", "error");
+        return;
+      }
+
+      captureBusy = true;
+      updateCaptureButtons();
+      setAudioStatus("busy", "Waiting for source selection");
+      setNotice("Select a tab or screen, then enable Share tab audio or system audio in the browser dialog.");
+
+      let pendingStream = null;
+      let pendingContext = null;
+      let pendingSource = null;
+      let pendingAnalyser = null;
+      let pendingMonitor = null;
+
+      try {
+        pendingStream = await requestDisplayAudio();
+        const audioTracks = pendingStream.getAudioTracks();
+
+        if (audioTracks.length === 0) {
+          pendingStream.getTracks().forEach((track) => track.stop());
+          pendingStream = null;
+          setAudioStatus("error", "No audio track");
+          setNotice("The source was shared without audio. Start again and enable Share tab audio (or system audio) before confirming.", "warning");
+          return;
+        }
+
+        pendingContext = new AudioContextClass();
+        await pendingContext.resume();
+        pendingAnalyser = pendingContext.createAnalyser();
+        pendingAnalyser.fftSize = 1024;
+        pendingAnalyser.minDecibels = -90;
+        pendingAnalyser.maxDecibels = -10;
+        pendingAnalyser.smoothingTimeConstant = 0.08;
+        pendingSource = pendingContext.createMediaStreamSource(pendingStream);
+        pendingMonitor = pendingContext.createGain();
+        pendingMonitor.gain.value = ui.monitorAudio.checked ? 1 : 0;
+
+        // Routing: source -> analyser -> monitor gain -> speakers. This keeps
+        // the captured audio audible while allowing the checkbox to mute the
+        // pass-through if the browser is already playing the tab locally.
+        pendingSource.connect(pendingAnalyser);
+        pendingAnalyser.connect(pendingMonitor);
+        pendingMonitor.connect(pendingContext.destination);
+
+        captureStream = pendingStream;
+        audioContext = pendingContext;
+        mediaSource = pendingSource;
+        analyser = pendingAnalyser;
+        monitorGain = pendingMonitor;
+        frequencyData = new Uint8Array(analyser.frequencyBinCount);
+        pendingStream = null;
+        pendingContext = null;
+        pendingSource = null;
+        pendingAnalyser = null;
+        pendingMonitor = null;
+
+        captureStream.getTracks().forEach((track) => {
+          track.addEventListener("ended", handleCaptureEnded, { once: true });
+        });
+
+        const sourceDescription = audioTracks[0].label || "Captured audio track";
+        setAudioStatus("ready", "Live audio reactive", sourceDescription);
+        setNotice("Audio is live. Bass expands the field, mids bend its structure, and treble adds jitter and light.");
+      } catch (error) {
+        if (pendingStream) {
+          pendingStream.getTracks().forEach((track) => track.stop());
+        }
+        if (pendingSource) {
+          pendingSource.disconnect();
+        }
+        if (pendingAnalyser) {
+          pendingAnalyser.disconnect();
+        }
+        if (pendingMonitor) {
+          pendingMonitor.disconnect();
+        }
+        if (pendingContext && pendingContext.state !== "closed") {
+          await pendingContext.close();
+        }
+
+        const failure = classifyCaptureError(error);
+        setAudioStatus("error", failure.label);
+        setNotice(failure.message, failure.tone);
+        if (failure.tone === "error") {
+          console.error("Audio capture failed:", error);
+        }
+      } finally {
+        captureBusy = false;
+        updateCaptureButtons();
+      }
+    }
+
+    async function stopCapture(message = "Audio capture stopped.") {
+      const streamToStop = captureStream;
+      const contextToClose = audioContext;
+      const sourceToDisconnect = mediaSource;
+      const analyserToDisconnect = analyser;
+      const monitorToDisconnect = monitorGain;
+
+      captureStream = null;
+      audioContext = null;
+      mediaSource = null;
+      analyser = null;
+      monitorGain = null;
+      frequencyData = null;
+
+      if (sourceToDisconnect) {
+        sourceToDisconnect.disconnect();
+      }
+      if (analyserToDisconnect) {
+        analyserToDisconnect.disconnect();
+      }
+      if (monitorToDisconnect) {
+        monitorToDisconnect.disconnect();
+      }
+      if (streamToStop) {
+        streamToStop.getTracks().forEach((track) => track.stop());
+      }
+      if (contextToClose && contextToClose.state !== "closed") {
+        await contextToClose.close();
+      }
+
+      settings.audio.bass = 0;
+      settings.audio.mid = 0;
+      settings.audio.treble = 0;
+      settings.audio.previousBass = 0;
+      settings.audio.impulse = 0;
+      setAudioStatus("idle", "Idle - waiting for capture");
+      setNotice(message);
+      updateCaptureButtons();
+    }
+
+    function handleCaptureEnded() {
+      if (!captureStream) {
+        return;
+      }
+
+      const ended = captureStream.getTracks().some((track) => track.readyState === "ended");
+      if (ended) {
+        void stopCapture("Browser/system audio sharing ended. Start a new capture whenever you are ready.");
+      }
+    }
+
+    function averageBand(lowFrequency, highFrequency) {
+      if (!audioContext || !analyser || !frequencyData) {
+        return 0;
+      }
+
+      const frequencyPerBin = audioContext.sampleRate / analyser.fftSize;
+      const firstBin = Math.max(0, Math.floor(lowFrequency / frequencyPerBin));
+      const lastBin = Math.min(
+        frequencyData.length - 1,
+        Math.ceil(highFrequency / frequencyPerBin)
+      );
+
+      if (lastBin < firstBin) {
+        return 0;
+      }
+
+      let sum = 0;
+      for (let bin = firstBin; bin <= lastBin; bin += 1) {
+        sum += frequencyData[bin];
+      }
+      return sum / ((lastBin - firstBin + 1) * 255);
+    }
+
+    function smoothAudioValue(current, target, delta) {
+      const smoothingRate = target > current ? 15 : 6;
+      const amount = 1 - Math.exp(-smoothingRate * delta);
+      return THREE.MathUtils.lerp(current, target, amount);
+    }
+
+    function updateAudioAnalysis(delta) {
+      if (analyser && frequencyData) {
+        analyser.getByteFrequencyData(frequencyData);
+
+        const bassTarget = THREE.MathUtils.clamp(
+          averageBand(0, 150) * settings.sensitivity.bass,
+          0,
+          1
+        );
+        const midTarget = THREE.MathUtils.clamp(
+          averageBand(150, 2000) * settings.sensitivity.mid,
+          0,
+          1
+        );
+        const trebleTarget = THREE.MathUtils.clamp(
+          averageBand(2000, audioContext.sampleRate / 2) * settings.sensitivity.treble,
+          0,
+          1
+        );
+
+        settings.audio.bass = smoothAudioValue(settings.audio.bass, bassTarget, delta);
+        settings.audio.mid = smoothAudioValue(settings.audio.mid, midTarget, delta);
+        settings.audio.treble = smoothAudioValue(settings.audio.treble, trebleTarget, delta);
+      } else {
+        settings.audio.bass = smoothAudioValue(settings.audio.bass, 0, delta);
+        settings.audio.mid = smoothAudioValue(settings.audio.mid, 0, delta);
+        settings.audio.treble = smoothAudioValue(settings.audio.treble, 0, delta);
+      }
+
+      const bassRise = Math.max(0, settings.audio.bass - settings.audio.previousBass);
+      settings.audio.impulse = Math.max(
+        settings.audio.impulse * Math.exp(-7 * delta),
+        bassRise * 5.5
+      );
+      settings.audio.previousBass = settings.audio.bass;
+
+      uniforms.uBass.value = settings.audio.bass;
+      uniforms.uMid.value = settings.audio.mid;
+      uniforms.uTreble.value = settings.audio.treble;
+      uniforms.uImpulse.value = settings.audio.impulse;
+    }
+
+    function updateSlider(name) {
+      const value = Number(ui.sliders[name].value);
+      settings.sensitivity[name] = value;
+      ui.sliderValues[name].textContent = `${value.toFixed(2)}x`;
+    }
+
+    Object.keys(ui.sliders).forEach((name) => {
+      ui.sliders[name].addEventListener("input", () => updateSlider(name));
+      updateSlider(name);
+    });
+
+    ui.themeButtons.forEach((button) => {
+      button.addEventListener("click", () => applyTheme(button.dataset.theme));
+    });
+
+    ui.monitorAudio.addEventListener("change", () => {
+      if (monitorGain && audioContext) {
+        monitorGain.gain.setTargetAtTime(
+          ui.monitorAudio.checked ? 1 : 0,
+          audioContext.currentTime,
+          0.015
+        );
+      }
+      setNotice(
+        ui.monitorAudio.checked
+          ? "Captured audio monitoring is enabled."
+          : "Monitoring is muted; analysis continues without routing the captured stream to your speakers."
+      );
+    });
+
+    ui.startCapture.addEventListener("click", () => {
+      void startCapture();
+    });
+
+    ui.stopCapture.addEventListener("click", () => {
+      void stopCapture();
+    });
+
+    function resize() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setPixelRatio(pixelRatio);
+      renderer.setSize(width, height, false);
+      composer.setSize(width, height);
+      uniforms.uPixelRatio.value = pixelRatio;
+    }
+
+    window.addEventListener("resize", resize, { passive: true });
+
+    let elapsed = 0;
+    let pulseTime = 0;
+    let fpsFrames = 0;
+    let fpsElapsed = 0;
+    let previousFrameTime = performance.now();
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const delta = Math.min(0.05, Math.max(0.001, (now - previousFrameTime) / 1000));
+      previousFrameTime = now;
+      elapsed += delta;
+      pulseTime += delta * (0.8 + settings.audio.bass * 4.5);
+
+      updateAudioAnalysis(delta);
+      uniforms.uTime.value = elapsed;
+      uniforms.uScale.value =
+        1 +
+        settings.audio.bass * 0.16 +
+        Math.sin(pulseTime) * (0.006 + settings.audio.bass * 0.018) +
+        settings.audio.impulse * 0.075;
+
+      particleField.rotation.y += delta * (0.045 + settings.audio.mid * 0.18);
+      particleField.rotation.x = Math.sin(elapsed * 0.13) * 0.09 + settings.audio.mid * 0.035;
+      particleField.rotation.z += delta * (0.018 + settings.audio.treble * 0.09);
+      controls.update();
+      composer.render();
+
+      fpsFrames += 1;
+      fpsElapsed += delta;
+      if (fpsElapsed >= 0.5) {
+        ui.fpsValue.textContent = `${Math.round(fpsFrames / fpsElapsed)} FPS`;
+        fpsFrames = 0;
+        fpsElapsed = 0;
+      }
+    }
+
+    applyTheme("cyberpunk");
+    resize();
+    updateCaptureButtons();
+    requestAnimationFrame(animate);
+
+    window.addEventListener("pagehide", () => {
+      if (captureStream) {
+        captureStream.getTracks().forEach((track) => track.stop());
+      }
+    });
+  </script>
+</body>
+</html>
