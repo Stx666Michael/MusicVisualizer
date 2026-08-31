@@ -68,6 +68,8 @@ The page loads Three.js and its post-processing modules from jsDelivr, so an int
 8. Use **Reset sliders** or **Reset visuals** to restore their numeric defaults; **Reset visuals** uses the current shape's defaults and preserves shape and atmosphere modes.
 9. Drag the particle field to orbit it.
 
+The active audio source button is highlighted after its stream starts. Neither source is selected initially, and stopping or losing the stream clears the highlight.
+
 The **Monitor input audio** option routes the selected input back to the speakers. Disable it if the browser is already playing the source locally and you hear an echo; keep it disabled for microphone input unless you intentionally want live monitoring, because speakers can feed back into the microphone. Disabling monitoring does not stop analysis.
 
 Use **Hide panel** to clear the controls from the canvas. The floating **Show panel** button remains available so the controls can be restored.

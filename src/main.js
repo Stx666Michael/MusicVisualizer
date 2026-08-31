@@ -436,11 +436,21 @@
       ui.notice.textContent = message;
     }
 
+    function updateActiveSourceButton() {
+      const displaySelected = captureSourceType === "display";
+      const microphoneSelected = captureSourceType === "microphone";
+      ui.startCapture.classList.toggle("is-selected", displaySelected);
+      ui.startCapture.setAttribute("aria-pressed", String(displaySelected));
+      ui.startMicrophone.classList.toggle("is-selected", microphoneSelected);
+      ui.startMicrophone.setAttribute("aria-pressed", String(microphoneSelected));
+    }
+
     function updateCaptureButtons() {
       const captureUnavailable = captureBusy || Boolean(captureStream);
       ui.startCapture.disabled = captureUnavailable;
       ui.startMicrophone.disabled = captureUnavailable;
       ui.stopCapture.disabled = captureBusy || !captureStream;
+      updateActiveSourceButton();
     }
 
     function setPanelVisibility(isVisible) {
