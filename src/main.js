@@ -186,7 +186,9 @@
           const planeRadius = Math.sqrt(Math.random()) * 1.48;
           const x = Math.cos(planeAngle) * planeRadius;
           const y = Math.sin(planeAngle) * planeRadius;
-          const z = (Math.random() - 0.5) * 0.4 + Math.sin(x * 3.2 + y * 1.4) * 0.045;
+          const centerThickness = 1.0 - THREE.MathUtils.smoothstep(planeRadius, 0.15, 1.48);
+          const depth = 0.045 + centerThickness * 0.24;
+          const z = (Math.random() - 0.5) * depth + Math.sin(x * 3.2 + y * 1.4) * (0.008 + centerThickness * 0.024);
           positions[offset] = x;
           positions[offset + 1] = y;
           positions[offset + 2] = z;

@@ -123,8 +123,6 @@
           float planeSpread = mix(0.0, 1.0, planeAudio);
           basePosition.x *= planeSpread;
           basePosition.z *= planeAudio;
-          basePosition.z += sin(time * 4.0 + basePosition.y * 3.0) * planeMotionWeight * planeAudio * 0.12;
-          basePosition.y += cos(time * 3.0 + basePosition.x * 2.0) * planeMotionWeight * planeAudio * 0.035;
         }
 
         float radius = length(basePosition);
