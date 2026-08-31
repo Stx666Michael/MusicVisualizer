@@ -4,6 +4,8 @@ Resonance Field is a single-page, audio-reactive 3D particle visualizer built wi
 
 The visualizer captures live browser tab or system audio, analyzes bass, mid, and treble energy, and uses those bands to drive a glowing 32,000-particle field.
 
+Online demo is [here](https://stx666michael.github.io/MusicVisualizer/).
+
 ## Features
 
 - Live tab or system audio capture through `navigator.mediaDevices.getDisplayMedia`
