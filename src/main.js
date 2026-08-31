@@ -153,7 +153,8 @@
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
     renderer.domElement.setAttribute("aria-label", "Interactive audio-reactive particle visualizer");
-    document.getElementById("app").appendChild(renderer.domElement);
+    const app = document.getElementById("app");
+    app.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -1056,19 +1057,24 @@
     });
 
     function resize() {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
+      const canvasBounds = renderer.domElement.getBoundingClientRect();
+      const width = Math.max(1, Math.round(canvasBounds.width || window.innerWidth));
+      const height = Math.max(1, Math.round(canvasBounds.height || window.innerHeight));
       const pixelRatio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
 
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
       renderer.setPixelRatio(pixelRatio);
       renderer.setSize(width, height, false);
       composer.setSize(width, height);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
       uniforms.uPixelRatio.value = pixelRatio;
     }
 
     window.addEventListener("resize", resize, { passive: true });
+    if (typeof ResizeObserver === "function") {
+      const resizeObserver = new ResizeObserver(resize);
+      resizeObserver.observe(app);
+    }
 
     let elapsed = 0;
     let visualTime = 0;
