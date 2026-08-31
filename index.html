@@ -11,11 +11,11 @@
   <main id="app" aria-label="3D audio-reactive particle field"></main>
   <div class="vignette" aria-hidden="true"></div>
 
-  <section class="hud" aria-label="Visualizer controls">
+  <section class="hud" id="controlsPanel" aria-label="Visualizer controls" aria-hidden="false">
     <header class="brand">
       <div class="eyebrow">WebGL audio instrument</div>
       <h1>Resonance Field</h1>
-      <p>Feed a live tab or system stream into a luminous field of 32,000 particles.</p>
+      <p>Feed a live tab or system stream into a luminous field of up to 50,000 particles.</p>
     </header>
 
     <div class="control-row">
@@ -38,7 +38,7 @@
     <section class="section" aria-label="Audio sensitivity">
       <div class="section-heading">
         <span>Response</span>
-        <span>Band sensitivity</span>
+        <button class="section-action" id="resetSliders" type="button">Reset sliders</button>
       </div>
 
       <label class="slider-row" for="bassSensitivity">
@@ -65,6 +65,54 @@
       </label>
     </section>
 
+    <section class="section" aria-label="Particle field controls">
+      <div class="section-heading">
+        <span>Field</span>
+        <button class="section-action" id="resetVisuals" type="button">Reset visuals</button>
+      </div>
+
+      <label class="slider-row" for="particleCount">
+        <span class="slider-label">Particles</span>
+        <input id="particleCount" type="range" min="8000" max="50000" step="1000" value="32000">
+        <span class="slider-value" id="particleCountDisplay">32,000</span>
+      </label>
+
+      <label class="slider-row" for="particleSize">
+        <span class="slider-label">Size</span>
+        <input id="particleSize" type="range" min="0.5" max="2" step="0.05" value="1">
+        <span class="slider-value" id="particleSizeDisplay">1.00x</span>
+      </label>
+
+      <label class="slider-row" for="motionSpeed">
+        <span class="slider-label">Motion</span>
+        <input id="motionSpeed" type="range" min="0.2" max="2" step="0.05" value="1">
+        <span class="slider-value" id="motionSpeedDisplay">1.00x</span>
+      </label>
+
+      <label class="slider-row" for="glowStrength">
+        <span class="slider-label">Glow</span>
+        <input id="glowStrength" type="range" min="0.4" max="1.8" step="0.05" value="1">
+        <span class="slider-value" id="glowStrengthDisplay">1.00x</span>
+      </label>
+    </section>
+
+    <section class="section" aria-label="Particle field shape">
+      <div class="section-heading">
+        <span>Shape</span>
+        <span>Overall form</span>
+      </div>
+
+      <label class="select-row" for="shapeSelect">
+        <span class="slider-label">Form</span>
+        <select id="shapeSelect">
+          <option value="sphere">Sphere</option>
+          <option value="plane">Vertical circular plane</option>
+          <option value="torus">Torus vortex</option>
+        </select>
+      </label>
+      <p class="hint shape-hint">The circular plane contracts to a central vertical line in silence and opens from the center with audio.</p>
+    </section>
+
     <section class="section" aria-label="Visual themes">
       <div class="section-heading">
         <span>Atmosphere</span>
@@ -75,14 +123,19 @@
         <button class="theme-button" data-theme="deep-space" type="button" aria-pressed="false">Deep Space</button>
         <button class="theme-button" data-theme="solar-flare" type="button" aria-pressed="false">Solar Flare</button>
       </div>
+      <label class="monitor" for="autoAtmosphere">
+        <input id="autoAtmosphere" type="checkbox">
+        <span><strong>Auto atmosphere</strong> Smoothly cycle through the theme palettes while the field animates.</span>
+      </label>
     </section>
 
     <footer class="footer">
       <span><strong id="fpsValue">0 FPS</strong> performance</span>
-      <span>32,000 points</span>
+      <span><strong id="particleCountValue">32,000</strong> points</span>
     </footer>
   </section>
 
+  <button class="button panel-toggle" id="panelToggle" type="button" aria-controls="controlsPanel" aria-expanded="true">Hide panel</button>
   <div class="interaction-tip">Drag to orbit - scroll to zoom - right-drag to pan</div>
 
   <script type="importmap">

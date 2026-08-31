@@ -4,18 +4,44 @@
     import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
     import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
-    const PARTICLE_COUNT = 32000;
+    const MAX_PARTICLE_COUNT = 50000;
     const MAX_PIXEL_RATIO = 2;
+    const BASE_POINT_SIZE = 0.055;
+    const DEFAULT_SENSITIVITY = Object.freeze({
+      bass: 1.55,
+      mid: 1.2,
+      treble: 1.4
+    });
+    const DEFAULT_VISUALS = Object.freeze({
+      particleCount: 32000,
+      particleSize: 1,
+      motion: 1,
+      glow: 1
+    });
+    const DEFAULT_SHAPE = "sphere";
+    const SHAPE_VALUES = Object.freeze({
+      sphere: 0,
+      plane: 1,
+      torus: 2
+    });
+    const THEME_ORDER = ["cyberpunk", "deep-space", "solar-flare"];
 
     const ui = {
       startCapture: document.getElementById("startCapture"),
       stopCapture: document.getElementById("stopCapture"),
+      controlsPanel: document.getElementById("controlsPanel"),
+      panelToggle: document.getElementById("panelToggle"),
+      resetSliders: document.getElementById("resetSliders"),
+      resetVisuals: document.getElementById("resetVisuals"),
+      shapeSelect: document.getElementById("shapeSelect"),
+      autoAtmosphere: document.getElementById("autoAtmosphere"),
       audioDot: document.getElementById("audioDot"),
       statusLabel: document.getElementById("statusLabel"),
       sourceLabel: document.getElementById("sourceLabel"),
       notice: document.getElementById("notice"),
       monitorAudio: document.getElementById("monitorAudio"),
       fpsValue: document.getElementById("fpsValue"),
+      particleCountValue: document.getElementById("particleCountValue"),
       sliders: {
         bass: document.getElementById("bassSensitivity"),
         mid: document.getElementById("midSensitivity"),
@@ -25,6 +51,18 @@
         bass: document.getElementById("bassValue"),
         mid: document.getElementById("midValue"),
         treble: document.getElementById("trebleValue")
+      },
+      visualSliders: {
+        particleCount: document.getElementById("particleCount"),
+        particleSize: document.getElementById("particleSize"),
+        motion: document.getElementById("motionSpeed"),
+        glow: document.getElementById("glowStrength")
+      },
+      visualSliderValues: {
+        particleCount: document.getElementById("particleCountDisplay"),
+        particleSize: document.getElementById("particleSizeDisplay"),
+        motion: document.getElementById("motionSpeedDisplay"),
+        glow: document.getElementById("glowStrengthDisplay")
       },
       themeButtons: [...document.querySelectorAll(".theme-button")]
     };
@@ -51,11 +89,8 @@
       throw error;
     }
     const settings = {
-      sensitivity: {
-        bass: Number(ui.sliders.bass.value),
-        mid: Number(ui.sliders.mid.value),
-        treble: Number(ui.sliders.treble.value)
-      },
+      sensitivity: { ...DEFAULT_SENSITIVITY },
+      visuals: { ...DEFAULT_VISUALS, autoAtmosphere: false },
       audio: {
         bass: 0,
         mid: 0,
@@ -112,22 +147,12 @@
     composer.addPass(bloomPass);
 
     function createParticleGeometry(count) {
-      const positions = new Float32Array(count * 3);
+      const positions = createShapePositions(DEFAULT_SHAPE, count);
       const randoms = new Float32Array(count * 3);
       const sizes = new Float32Array(count);
 
       for (let index = 0; index < count; index += 1) {
         const offset = index * 3;
-        const directionY = 1 - Math.random() * 2;
-        const directionRadius = Math.sqrt(1 - directionY * directionY);
-        const angle = Math.random() * Math.PI * 2;
-        const shellBias = Math.pow(Math.random(), 0.42);
-        const radius = 0.12 + shellBias * 1.22;
-
-        positions[offset] = Math.cos(angle) * directionRadius * radius;
-        positions[offset + 1] = directionY * radius;
-        positions[offset + 2] = Math.sin(angle) * directionRadius * radius;
-
         randoms[offset] = Math.random();
         randoms[offset + 1] = Math.random();
         randoms[offset + 2] = Math.random();
@@ -139,6 +164,43 @@
       geometry.setAttribute("aRandom", new THREE.BufferAttribute(randoms, 3));
       geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
       return geometry;
+    }
+
+    function createShapePositions(shapeName, count) {
+      const positions = new Float32Array(count * 3);
+
+      for (let index = 0; index < count; index += 1) {
+        const offset = index * 3;
+        if (shapeName === "plane") {
+          const planeAngle = Math.random() * Math.PI * 2;
+          const planeRadius = Math.sqrt(Math.random()) * 1.48;
+          const x = Math.cos(planeAngle) * planeRadius;
+          const y = Math.sin(planeAngle) * planeRadius;
+          const z = (Math.random() - 0.5) * 0.4 + Math.sin(x * 3.2 + y * 1.4) * 0.045;
+          positions[offset] = x;
+          positions[offset + 1] = y;
+          positions[offset + 2] = z;
+        } else if (shapeName === "torus") {
+          const ringAngle = Math.random() * Math.PI * 2;
+          const tubeAngle = Math.random() * Math.PI * 2;
+          const tubeRadius = 0.14 + Math.random() * 0.26;
+          const ringRadius = 0.88 + tubeRadius * Math.cos(tubeAngle);
+          positions[offset] = ringRadius * Math.cos(ringAngle);
+          positions[offset + 1] = tubeRadius * Math.sin(tubeAngle);
+          positions[offset + 2] = ringRadius * Math.sin(ringAngle);
+        } else {
+          const directionY = 1 - Math.random() * 2;
+          const directionRadius = Math.sqrt(1 - directionY * directionY);
+          const angle = Math.random() * Math.PI * 2;
+          const shellBias = Math.pow(Math.random(), 0.42);
+          const radius = 0.12 + shellBias * 1.22;
+
+          positions[offset] = Math.cos(angle) * directionRadius * radius;
+          positions[offset + 1] = directionY * radius;
+          positions[offset + 2] = Math.sin(angle) * directionRadius * radius;
+        }
+      }
+      return positions;
     }
 
     // Ashima-style 3D simplex noise keeps the organic motion entirely on the GPU.
@@ -153,8 +215,9 @@
       uTreble: { value: 0 },
       uImpulse: { value: 0 },
       uScale: { value: 1 },
+      uShape: { value: SHAPE_VALUES[DEFAULT_SHAPE] },
       uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO) },
-      uPointSize: { value: 0.055 },
+      uPointSize: { value: BASE_POINT_SIZE * DEFAULT_VISUALS.particleSize },
       uColorA: { value: new THREE.Color(0x121d91) },
       uColorB: { value: new THREE.Color(0x943cff) },
       uColorC: { value: new THREE.Color(0xffd7ff) }
@@ -169,7 +232,9 @@
       blending: THREE.AdditiveBlending
     });
 
-    const particleField = new THREE.Points(createParticleGeometry(PARTICLE_COUNT), particleMaterial);
+    const particleGeometry = createParticleGeometry(MAX_PARTICLE_COUNT);
+    particleGeometry.setDrawRange(0, DEFAULT_VISUALS.particleCount);
+    const particleField = new THREE.Points(particleGeometry, particleMaterial);
     scene.add(particleField);
 
     const themes = {
@@ -205,17 +270,27 @@
       }
     };
 
-    function applyTheme(themeName) {
+    const themeColors = THEME_ORDER.reduce((colors, themeName) => {
       const theme = themes[themeName];
-      if (!theme) {
-        return;
-      }
+      colors[themeName] = {
+        colorA: new THREE.Color(theme.colorA),
+        colorB: new THREE.Color(theme.colorB),
+        colorC: new THREE.Color(theme.colorC)
+      };
+      return colors;
+    }, {});
+    let activeThemeName = "cyberpunk";
+    let atmospherePhase = 0;
 
-      uniforms.uColorA.value.setHex(theme.colorA);
-      uniforms.uColorB.value.setHex(theme.colorB);
-      uniforms.uColorC.value.setHex(theme.colorC);
-      bloomPass.strength = theme.bloom;
-      bloomPass.threshold = theme.threshold;
+    function updateBloomStrength() {
+      const theme = themes[activeThemeName];
+      if (theme) {
+        bloomPass.strength = theme.bloom * settings.visuals.glow;
+      }
+    }
+
+    function updateThemeChrome(themeName) {
+      const theme = themes[themeName];
       document.documentElement.style.setProperty("--accent", theme.accent);
       document.documentElement.style.setProperty("--accent-soft", theme.accentSoft);
       document.documentElement.style.setProperty("--accent-strong", theme.accentStrong);
@@ -223,6 +298,51 @@
       ui.themeButtons.forEach((button) => {
         button.setAttribute("aria-pressed", String(button.dataset.theme === themeName));
       });
+    }
+
+    function setThemePalette(fromThemeName, toThemeName, amount) {
+      const fromColors = themeColors[fromThemeName];
+      const toColors = themeColors[toThemeName];
+      uniforms.uColorA.value.copy(fromColors.colorA).lerp(toColors.colorA, amount);
+      uniforms.uColorB.value.copy(fromColors.colorB).lerp(toColors.colorB, amount);
+      uniforms.uColorC.value.copy(fromColors.colorC).lerp(toColors.colorC, amount);
+    }
+
+    function applyTheme(themeName) {
+      const theme = themes[themeName];
+      if (!theme) {
+        return;
+      }
+
+      activeThemeName = themeName;
+      atmospherePhase = THEME_ORDER.indexOf(themeName);
+      setThemePalette(themeName, themeName, 0);
+      updateBloomStrength();
+      bloomPass.threshold = theme.threshold;
+      updateThemeChrome(themeName);
+    }
+
+    function updateAtmosphere(delta) {
+      if (!settings.visuals.autoAtmosphere) {
+        return;
+      }
+
+      atmospherePhase = (atmospherePhase + delta * THEME_ORDER.length / 8) % THEME_ORDER.length;
+      const fromIndex = Math.floor(atmospherePhase);
+      const amount = atmospherePhase - fromIndex;
+      const fromThemeName = THEME_ORDER[fromIndex];
+      const toThemeName = THEME_ORDER[(fromIndex + 1) % THEME_ORDER.length];
+      const smoothAmount = amount * amount * (3 - 2 * amount);
+      const fromTheme = themes[fromThemeName];
+      const toTheme = themes[toThemeName];
+
+      if (activeThemeName !== fromThemeName) {
+        activeThemeName = fromThemeName;
+        updateThemeChrome(fromThemeName);
+      }
+      setThemePalette(fromThemeName, toThemeName, smoothAmount);
+      bloomPass.strength = THREE.MathUtils.lerp(fromTheme.bloom, toTheme.bloom, smoothAmount) * settings.visuals.glow;
+      bloomPass.threshold = THREE.MathUtils.lerp(fromTheme.threshold, toTheme.threshold, smoothAmount);
     }
 
     function setAudioStatus(state, label, source = "No audio source") {
@@ -239,6 +359,13 @@
     function updateCaptureButtons() {
       ui.startCapture.disabled = captureBusy || Boolean(captureStream);
       ui.stopCapture.disabled = captureBusy || !captureStream;
+    }
+
+    function setPanelVisibility(isVisible) {
+      ui.controlsPanel.classList.toggle("is-hidden", !isVisible);
+      ui.controlsPanel.setAttribute("aria-hidden", String(!isVisible));
+      ui.panelToggle.setAttribute("aria-expanded", String(isVisible));
+      ui.panelToggle.textContent = isVisible ? "Hide panel" : "Show panel";
     }
 
     function requestDisplayAudio() {
@@ -525,10 +652,67 @@
       uniforms.uImpulse.value = settings.audio.impulse;
     }
 
+    function applyShape(shapeName) {
+      if (!["sphere", "plane", "torus"].includes(shapeName)) {
+        return;
+      }
+
+      const positionAttribute = particleField.geometry.getAttribute("position");
+      positionAttribute.array.set(createShapePositions(shapeName, MAX_PARTICLE_COUNT));
+      positionAttribute.needsUpdate = true;
+      particleField.geometry.computeBoundingSphere();
+      uniforms.uShape.value = SHAPE_VALUES[shapeName];
+      ui.shapeSelect.value = shapeName;
+    }
+
     function updateSlider(name) {
       const value = Number(ui.sliders[name].value);
       settings.sensitivity[name] = value;
       ui.sliderValues[name].textContent = `${value.toFixed(2)}x`;
+    }
+
+    function formatParticleCount(value) {
+      return Math.round(value).toLocaleString("en-US");
+    }
+
+    function updateVisualSlider(name) {
+      const value = Number(ui.visualSliders[name].value);
+      settings.visuals[name] = value;
+
+      if (name === "particleCount") {
+        particleField.geometry.setDrawRange(0, Math.round(value));
+        ui.visualSliderValues[name].textContent = formatParticleCount(value);
+        ui.particleCountValue.textContent = formatParticleCount(value);
+      } else if (name === "particleSize") {
+        uniforms.uPointSize.value = BASE_POINT_SIZE * value;
+        ui.visualSliderValues[name].textContent = `${value.toFixed(2)}x`;
+      } else if (name === "motion" || name === "glow") {
+        ui.visualSliderValues[name].textContent = `${value.toFixed(2)}x`;
+        if (name === "glow") {
+          updateBloomStrength();
+        }
+      }
+    }
+
+    function resetSliders() {
+      Object.entries(DEFAULT_SENSITIVITY).forEach(([name, value]) => {
+        ui.sliders[name].value = String(value);
+        updateSlider(name);
+      });
+      setNotice("Band sensitivity sliders reset to their defaults.");
+    }
+
+    function resetVisuals() {
+      Object.entries(DEFAULT_VISUALS).forEach(([name, value]) => {
+        ui.visualSliders[name].value = String(value);
+        updateVisualSlider(name);
+      });
+      ui.shapeSelect.value = DEFAULT_SHAPE;
+      applyShape(DEFAULT_SHAPE);
+      ui.autoAtmosphere.checked = false;
+      settings.visuals.autoAtmosphere = false;
+      applyTheme(activeThemeName);
+      setNotice("Particle count and visual controls reset to their defaults.");
     }
 
     Object.keys(ui.sliders).forEach((name) => {
@@ -536,8 +720,43 @@
       updateSlider(name);
     });
 
+    Object.keys(ui.visualSliders).forEach((name) => {
+      ui.visualSliders[name].addEventListener("input", () => updateVisualSlider(name));
+      updateVisualSlider(name);
+    });
+
+    ui.resetSliders.addEventListener("click", resetSliders);
+    ui.resetVisuals.addEventListener("click", resetVisuals);
+    ui.shapeSelect.addEventListener("change", () => {
+      applyShape(ui.shapeSelect.value);
+      const shapeLabel = ui.shapeSelect.options[ui.shapeSelect.selectedIndex].textContent;
+      setNotice(`Field shape changed to ${shapeLabel}.`);
+    });
+
+    ui.panelToggle.addEventListener("click", () => {
+      const isVisible = !ui.controlsPanel.classList.contains("is-hidden");
+      setPanelVisibility(!isVisible);
+    });
+
     ui.themeButtons.forEach((button) => {
-      button.addEventListener("click", () => applyTheme(button.dataset.theme));
+      button.addEventListener("click", () => {
+        if (settings.visuals.autoAtmosphere) {
+          settings.visuals.autoAtmosphere = false;
+          ui.autoAtmosphere.checked = false;
+        }
+        applyTheme(button.dataset.theme);
+      });
+    });
+
+    ui.autoAtmosphere.addEventListener("change", () => {
+      settings.visuals.autoAtmosphere = ui.autoAtmosphere.checked;
+      if (settings.visuals.autoAtmosphere) {
+        atmospherePhase = THEME_ORDER.indexOf(activeThemeName);
+        setNotice("Auto atmosphere enabled. Theme colors will transition continuously.");
+      } else {
+        applyTheme(activeThemeName);
+        setNotice("Auto atmosphere disabled. The selected theme is fixed.");
+      }
     });
 
     ui.monitorAudio.addEventListener("change", () => {
@@ -579,6 +798,7 @@
     window.addEventListener("resize", resize, { passive: true });
 
     let elapsed = 0;
+    let visualTime = 0;
     let pulseTime = 0;
     let fpsFrames = 0;
     let fpsElapsed = 0;
@@ -589,19 +809,22 @@
       const delta = Math.min(0.05, Math.max(0.001, (now - previousFrameTime) / 1000));
       previousFrameTime = now;
       elapsed += delta;
-      pulseTime += delta * (0.8 + settings.audio.bass * 4.5);
+      const visualDelta = delta * settings.visuals.motion;
+      visualTime += visualDelta;
+      pulseTime += visualDelta * (0.8 + settings.audio.bass * 4.5);
 
       updateAudioAnalysis(delta);
-      uniforms.uTime.value = elapsed;
+      updateAtmosphere(delta);
+      uniforms.uTime.value = visualTime;
       uniforms.uScale.value =
         1 +
         settings.audio.bass * 0.16 +
         Math.sin(pulseTime) * (0.006 + settings.audio.bass * 0.018) +
         settings.audio.impulse * 0.075;
 
-      particleField.rotation.y += delta * (0.045 + settings.audio.mid * 0.18);
-      particleField.rotation.x = Math.sin(elapsed * 0.13) * 0.09 + settings.audio.mid * 0.035;
-      particleField.rotation.z += delta * (0.018 + settings.audio.treble * 0.09);
+      particleField.rotation.y += visualDelta * (0.045 + settings.audio.mid * 0.18);
+      particleField.rotation.x = Math.sin(visualTime * 0.13) * 0.09 + settings.audio.mid * 0.035;
+      particleField.rotation.z += visualDelta * (0.018 + settings.audio.treble * 0.09);
       controls.update();
       composer.render();
 
@@ -615,6 +838,7 @@
     }
 
     applyTheme("cyberpunk");
+    setPanelVisibility(true);
     resize();
     updateCaptureButtons();
     requestAnimationFrame(animate);

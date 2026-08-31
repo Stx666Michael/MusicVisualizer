@@ -16,6 +16,12 @@ The visualizer captures live browser tab or system audio, analyzes bass, mid, an
 - `EffectComposer` with `UnrealBloomPass` for neon glow
 - Cyberpunk, Deep Space, and Solar Flare themes
 - Per-band sensitivity controls
+- Adjustable particle count (8,000-50,000), particle size, motion speed, and bloom glow
+- Reset controls for sensitivity and visual settings
+- Hideable controls panel with a persistent show button
+- Sphere, vertical circular plane, and torus particle field shapes
+- The circular plane contracts to a central vertical line in silence and activates from the center as audio rises
+- Optional automatic atmosphere mode for continuous palette transitions
 - Optional audio monitoring with an echo-prevention toggle
 - Live capture status and FPS indicators
 - Responsive full-window rendering
@@ -52,9 +58,15 @@ The page loads Three.js and its post-processing modules from jsDelivr, so an int
 2. Choose a browser tab or screen in the sharing dialog.
 3. Enable **Share tab audio** or the equivalent system-audio option.
 4. Use the **Bass**, **Mids**, and **Treble** sliders to adjust the response.
-5. Select a theme and drag the particle field to orbit it.
+5. Adjust **Particles**, **Size**, **Motion**, and **Glow** to tune the visual output.
+6. Choose a **Sphere**, **Vertical circular plane**, or **Torus vortex** field shape.
+7. Enable **Auto atmosphere** to smoothly transition between the theme palettes, or choose a fixed theme.
+8. Use **Reset sliders** or **Reset visuals** to restore their default values.
+9. Drag the particle field to orbit it.
 
 The **Monitor captured audio** option routes the captured stream back to the speakers. Disable it if the browser is already playing the source locally and you hear an echo. Disabling monitoring does not stop analysis.
+
+Use **Hide panel** to clear the controls from the canvas. The floating **Show panel** button remains available so the controls can be restored.
 
 ## Project structure
 
