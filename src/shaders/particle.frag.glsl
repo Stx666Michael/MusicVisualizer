@@ -12,9 +12,14 @@
       varying float vVelocity;
       varying float vAudioMix;
       varying float vCenterActivity;
+      varying float vParticleVisibility;
       varying float vDepth;
 
       void main() {
+        if (vParticleVisibility <= 0.0) {
+          discard;
+        }
+
         vec2 centered = gl_PointCoord - 0.5;
         float distanceFromCenter = length(centered);
         if (distanceFromCenter > 0.5) {
@@ -33,6 +38,6 @@
         color += uColorC * vCenterActivity * (0.45 + core * 0.9);
 
         float brightness = 1.05 + hotMix * 1.25 + core * 0.35 + vCenterActivity * 1.5;
-        float alpha = glow * (0.55 + hotMix * 0.58 + uTreble * 0.2 + vCenterActivity * 0.75) * (0.82 + vDepth * 0.18);
+        float alpha = glow * (0.55 + hotMix * 0.58 + uTreble * 0.2 + vCenterActivity * 0.75) * (0.82 + vDepth * 0.18) * vParticleVisibility;
         gl_FragColor = vec4(color * brightness, alpha);
       }

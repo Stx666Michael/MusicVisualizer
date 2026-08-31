@@ -110,6 +110,22 @@
           <option value="torus">Torus vortex</option>
         </select>
       </label>
+      <label class="monitor" for="autoShape">
+        <input id="autoShape" type="checkbox">
+        <span><strong>Auto shape</strong> Randomly choose the next form and smoothly transition its default visual settings.</span>
+      </label>
+      <div class="timing-controls" id="shapeTimingControls" aria-hidden="true" hidden>
+        <label class="slider-row" for="shapeKeepTime">
+          <span class="slider-label">Keep</span>
+          <input id="shapeKeepTime" type="range" min="1" max="30" step="0.5" value="6">
+          <span class="slider-value" id="shapeKeepTimeDisplay">6.0s</span>
+        </label>
+        <label class="slider-row" for="shapeTransitionTime">
+          <span class="slider-label">Transition</span>
+          <input id="shapeTransitionTime" type="range" min="0.5" max="10" step="0.1" value="5.0">
+          <span class="slider-value" id="shapeTransitionTimeDisplay">5.0s</span>
+        </label>
+      </div>
     </section>
 
     <section class="section" aria-label="Visual themes">
@@ -124,8 +140,20 @@
       </div>
       <label class="monitor" for="autoAtmosphere">
         <input id="autoAtmosphere" type="checkbox">
-        <span><strong>Auto atmosphere</strong> Smoothly cycle through the theme palettes while the field animates.</span>
+        <span><strong>Auto atmosphere</strong> Randomly choose the next theme and smoothly transition its palette.</span>
       </label>
+      <div class="timing-controls" id="atmosphereTimingControls" aria-hidden="true" hidden>
+        <label class="slider-row" for="colorKeepTime">
+          <span class="slider-label">Keep</span>
+          <input id="colorKeepTime" type="range" min="1" max="30" step="0.5" value="6">
+          <span class="slider-value" id="colorKeepTimeDisplay">6.0s</span>
+        </label>
+        <label class="slider-row" for="colorTransitionTime">
+          <span class="slider-label">Transition</span>
+          <input id="colorTransitionTime" type="range" min="0.5" max="10" step="0.1" value="5.0">
+          <span class="slider-value" id="colorTransitionTimeDisplay">5.0s</span>
+        </label>
+      </div>
     </section>
 
     <footer class="footer">

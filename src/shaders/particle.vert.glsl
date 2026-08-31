@@ -7,17 +7,22 @@
       uniform float uTreble;
       uniform float uImpulse;
       uniform float uScale;
-      uniform float uShape;
+      uniform float uPlaneInfluence;
+      uniform float uShapeMix;
+      uniform float uParticleCount;
       uniform float uPixelRatio;
       uniform float uPointSize;
 
+      attribute vec3 aTargetPosition;
       attribute vec3 aRandom;
       attribute float aSize;
+      attribute float aParticleIndex;
 
       varying float vDisplacement;
       varying float vVelocity;
       varying float vAudioMix;
       varying float vCenterActivity;
+      varying float vParticleVisibility;
       varying float vDepth;
 
       vec3 mod289(vec3 value) {
@@ -111,18 +116,19 @@
       }
 
       void main() {
-        vec3 basePosition = position;
+        vec3 basePosition = mix(position, aTargetPosition, uShapeMix);
         float time = uTime;
+        float particleVisibility = smoothstep(0.0, 1.0, uParticleCount - aParticleIndex);
         float planeAudio = clamp(uBass * 0.8 + uMid * 0.65 + uTreble * 0.3, 0.0, 1.0);
-        float planeCenterWeight = 0.0;
+        float planeCenterWeight = (1.0 - smoothstep(0.0, 1.48, length(basePosition.xy))) * uPlaneInfluence;
         float planeMotionWeight = 1.0;
 
-        if (uShape > 0.5 && uShape < 1.5) {
-          planeCenterWeight = 1.0 - smoothstep(0.0, 1.48, length(basePosition.xy));
-          planeMotionWeight = planeCenterWeight * (1.0 + planeCenterWeight * 1.75);
-          float planeSpread = mix(0.0, 1.0, planeAudio);
+        if (uPlaneInfluence > 0.0) {
+          float planeCenterMotion = planeCenterWeight * (1.0 + planeCenterWeight * 1.75);
+          planeMotionWeight = mix(1.0, planeCenterMotion, uPlaneInfluence);
+          float planeSpread = mix(1.0, planeAudio, uPlaneInfluence);
           basePosition.x *= planeSpread;
-          basePosition.z *= planeAudio;
+          basePosition.z *= mix(1.0, planeAudio, uPlaneInfluence);
         }
 
         float radius = length(basePosition);
@@ -151,8 +157,9 @@
         displaced += normal * sin(time * 18.0 + aRandom.x * 62.8318) * uTreble * 0.012 * planeMotionWeight;
 
         float localScale = uScale;
-        if (uShape > 0.5 && uShape < 1.5) {
-          localScale = 1.0 + (uScale - 1.0) * planeCenterWeight;
+        if (uPlaneInfluence > 0.0) {
+          float planeScale = 1.0 + (uScale - 1.0) * planeCenterWeight;
+          localScale = mix(uScale, planeScale, uPlaneInfluence);
         }
 
         vec4 modelViewPosition = modelViewMatrix * vec4(displaced * localScale, 1.0);
@@ -164,11 +171,12 @@
           (1.0 + uTreble * 0.22 + planeCenterWeight * (0.55 + planeAudio * 1.25)),
           1.0,
           64.0
-        );
+        ) * particleVisibility;
 
         vDisplacement = clamp((abs(midWave) + abs(trebleDetail) * 1.4 + uImpulse * 0.2) * planeMotionWeight, 0.0, 1.0);
         vVelocity = clamp((length(flowNoise) * 0.55 + abs(pulseWave) * uMid * 0.25) * planeMotionWeight, 0.0, 1.0);
         vAudioMix = clamp(uBass * 0.8 + uMid * 0.35 + uTreble * 0.25, 0.0, 1.0);
         vCenterActivity = planeCenterWeight * (0.35 + planeAudio * 0.65);
+        vParticleVisibility = particleVisibility;
         vDepth = clamp(1.0 - (-modelViewPosition.z / 10.0), 0.0, 1.0);
       }

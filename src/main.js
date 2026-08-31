@@ -29,10 +29,13 @@
       torus: Object.freeze({ ...DEFAULT_VISUALS })
     });
     const DEFAULT_SHAPE = "sphere";
-    const SHAPE_VALUES = Object.freeze({
-      sphere: 0,
-      plane: 1,
-      torus: 2
+    const SHAPE_ORDER = ["sphere", "plane", "torus"];
+    const SHAPE_TRANSITION_DURATION = 5.0;
+    const DEFAULT_AUTOMATION_TIMING = Object.freeze({
+      shapeKeep: 6,
+      shapeTransition: SHAPE_TRANSITION_DURATION,
+      colorKeep: 6,
+      colorTransition: SHAPE_TRANSITION_DURATION
     });
     const THEME_ORDER = ["cyberpunk", "deep-space", "solar-flare"];
 
@@ -44,6 +47,9 @@
       resetSliders: document.getElementById("resetSliders"),
       resetVisuals: document.getElementById("resetVisuals"),
       shapeSelect: document.getElementById("shapeSelect"),
+      autoShape: document.getElementById("autoShape"),
+      shapeTimingControls: document.getElementById("shapeTimingControls"),
+      atmosphereTimingControls: document.getElementById("atmosphereTimingControls"),
       autoAtmosphere: document.getElementById("autoAtmosphere"),
       audioDot: document.getElementById("audioDot"),
       statusLabel: document.getElementById("statusLabel"),
@@ -74,6 +80,18 @@
         motion: document.getElementById("motionSpeedDisplay"),
         glow: document.getElementById("glowStrengthDisplay")
       },
+      timingSliders: {
+        shapeKeep: document.getElementById("shapeKeepTime"),
+        shapeTransition: document.getElementById("shapeTransitionTime"),
+        colorKeep: document.getElementById("colorKeepTime"),
+        colorTransition: document.getElementById("colorTransitionTime")
+      },
+      timingSliderValues: {
+        shapeKeep: document.getElementById("shapeKeepTimeDisplay"),
+        shapeTransition: document.getElementById("shapeTransitionTimeDisplay"),
+        colorKeep: document.getElementById("colorKeepTimeDisplay"),
+        colorTransition: document.getElementById("colorTransitionTimeDisplay")
+      },
       themeButtons: [...document.querySelectorAll(".theme-button")]
     };
 
@@ -100,7 +118,8 @@
     }
     const settings = {
       sensitivity: { ...DEFAULT_SENSITIVITY },
-      visuals: { ...DEFAULT_VISUALS, autoAtmosphere: false },
+      visuals: { ...DEFAULT_VISUALS, autoAtmosphere: false, autoShape: false },
+      timing: { ...DEFAULT_AUTOMATION_TIMING },
       audio: {
         bass: 0,
         mid: 0,
@@ -158,8 +177,10 @@
 
     function createParticleGeometry(count) {
       const positions = createShapePositions(DEFAULT_SHAPE, count);
+      const targetPositions = positions.slice();
       const randoms = new Float32Array(count * 3);
       const sizes = new Float32Array(count);
+      const particleIndices = new Float32Array(count);
 
       for (let index = 0; index < count; index += 1) {
         const offset = index * 3;
@@ -167,12 +188,15 @@
         randoms[offset + 1] = Math.random();
         randoms[offset + 2] = Math.random();
         sizes[index] = 0.62 + Math.random() * 1.18;
+        particleIndices[index] = index;
       }
 
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute("aTargetPosition", new THREE.BufferAttribute(targetPositions, 3));
       geometry.setAttribute("aRandom", new THREE.BufferAttribute(randoms, 3));
       geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
+      geometry.setAttribute("aParticleIndex", new THREE.BufferAttribute(particleIndices, 1));
       return geometry;
     }
 
@@ -227,7 +251,9 @@
       uTreble: { value: 0 },
       uImpulse: { value: 0 },
       uScale: { value: 1 },
-      uShape: { value: SHAPE_VALUES[DEFAULT_SHAPE] },
+      uPlaneInfluence: { value: DEFAULT_SHAPE === "plane" ? 1 : 0 },
+      uShapeMix: { value: 0 },
+      uParticleCount: { value: DEFAULT_VISUALS.particleCount },
       uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO) },
       uPointSize: { value: BASE_POINT_SIZE * DEFAULT_VISUALS.particleSize },
       uColorA: { value: new THREE.Color(0x121d91) },
@@ -247,7 +273,13 @@
     const particleGeometry = createParticleGeometry(MAX_PARTICLE_COUNT);
     particleGeometry.setDrawRange(0, DEFAULT_VISUALS.particleCount);
     const particleField = new THREE.Points(particleGeometry, particleMaterial);
+    particleField.frustumCulled = false;
     scene.add(particleField);
+
+    let activeShapeName = DEFAULT_SHAPE;
+    let shapeTransition = null;
+    let visualTransition = null;
+    let autoShapeElapsed = 0;
 
     const themes = {
       cyberpunk: {
@@ -292,7 +324,8 @@
       return colors;
     }, {});
     let activeThemeName = "cyberpunk";
-    let atmospherePhase = 0;
+    let atmosphereTargetThemeName = "deep-space";
+    let atmosphereElapsed = 0;
 
     function updateBloomStrength() {
       const theme = themes[activeThemeName];
@@ -312,6 +345,14 @@
       });
     }
 
+    function chooseRandomOther(items, currentItem) {
+      const candidates = items.filter((item) => item !== currentItem);
+      if (candidates.length === 0) {
+        return currentItem;
+      }
+      return candidates[Math.floor(Math.random() * candidates.length)];
+    }
+
     function setThemePalette(fromThemeName, toThemeName, amount) {
       const fromColors = themeColors[fromThemeName];
       const toColors = themeColors[toThemeName];
@@ -327,7 +368,8 @@
       }
 
       activeThemeName = themeName;
-      atmospherePhase = THEME_ORDER.indexOf(themeName);
+      atmosphereTargetThemeName = chooseRandomOther(THEME_ORDER, themeName);
+      atmosphereElapsed = 0;
       setThemePalette(themeName, themeName, 0);
       updateBloomStrength();
       bloomPass.threshold = theme.threshold;
@@ -339,22 +381,45 @@
         return;
       }
 
-      atmospherePhase = (atmospherePhase + delta * THEME_ORDER.length / 8) % THEME_ORDER.length;
-      const fromIndex = Math.floor(atmospherePhase);
-      const amount = atmospherePhase - fromIndex;
-      const fromThemeName = THEME_ORDER[fromIndex];
-      const toThemeName = THEME_ORDER[(fromIndex + 1) % THEME_ORDER.length];
-      const smoothAmount = amount * amount * (3 - 2 * amount);
+      atmosphereElapsed += delta;
+      const fromThemeName = activeThemeName;
+      const toThemeName = atmosphereTargetThemeName;
       const fromTheme = themes[fromThemeName];
       const toTheme = themes[toThemeName];
+
+      if (atmosphereElapsed < settings.timing.colorKeep) {
+        setThemePalette(fromThemeName, fromThemeName, 0);
+        bloomPass.strength = fromTheme.bloom * settings.visuals.glow;
+        bloomPass.threshold = fromTheme.threshold;
+        return;
+      }
+
+      const transitionProgress =
+        (atmosphereElapsed - settings.timing.colorKeep) / settings.timing.colorTransition;
+      if (transitionProgress >= 1) {
+        activeThemeName = toThemeName;
+        atmosphereTargetThemeName = chooseRandomOther(THEME_ORDER, activeThemeName);
+        atmosphereElapsed = 0;
+        setThemePalette(activeThemeName, activeThemeName, 0);
+        updateBloomStrength();
+        bloomPass.threshold = themes[activeThemeName].threshold;
+        updateThemeChrome(activeThemeName);
+        return;
+      }
 
       if (activeThemeName !== fromThemeName) {
         activeThemeName = fromThemeName;
         updateThemeChrome(fromThemeName);
       }
+      const smoothAmount = easeTransition(THREE.MathUtils.clamp(transitionProgress, 0, 1));
       setThemePalette(fromThemeName, toThemeName, smoothAmount);
-      bloomPass.strength = THREE.MathUtils.lerp(fromTheme.bloom, toTheme.bloom, smoothAmount) * settings.visuals.glow;
-      bloomPass.threshold = THREE.MathUtils.lerp(fromTheme.threshold, toTheme.threshold, smoothAmount);
+      bloomPass.strength =
+        THREE.MathUtils.lerp(fromTheme.bloom, toTheme.bloom, smoothAmount) * settings.visuals.glow;
+      bloomPass.threshold = THREE.MathUtils.lerp(
+        fromTheme.threshold,
+        toTheme.threshold,
+        smoothAmount
+      );
     }
 
     function setAudioStatus(state, label, source = "No audio source") {
@@ -664,17 +729,112 @@
       uniforms.uImpulse.value = settings.audio.impulse;
     }
 
-    function applyShape(shapeName) {
-      if (!Object.prototype.hasOwnProperty.call(SHAPE_VALUES, shapeName)) {
+    function easeTransition(amount) {
+      return amount * amount * (3 - 2 * amount);
+    }
+
+    function commitShapeTransition() {
+      if (!shapeTransition) {
         return;
       }
 
       const positionAttribute = particleField.geometry.getAttribute("position");
-      positionAttribute.array.set(createShapePositions(shapeName, MAX_PARTICLE_COUNT));
+      const targetAttribute = particleField.geometry.getAttribute("aTargetPosition");
+      const amount = uniforms.uShapeMix.value;
+      for (let index = 0; index < positionAttribute.array.length; index += 1) {
+        positionAttribute.array[index] = THREE.MathUtils.lerp(
+          positionAttribute.array[index],
+          targetAttribute.array[index],
+          amount
+        );
+      }
       positionAttribute.needsUpdate = true;
-      particleField.geometry.computeBoundingSphere();
-      uniforms.uShape.value = SHAPE_VALUES[shapeName];
+      activeShapeName = shapeTransition.toShape;
+      shapeTransition = null;
+      uniforms.uShapeMix.value = 0;
+    }
+
+    function startShapeTransition(
+      shapeName,
+      applyDefaults = true,
+      duration = SHAPE_TRANSITION_DURATION
+    ) {
+      if (!SHAPE_ORDER.includes(shapeName)) {
+        return;
+      }
+
+      if (shapeTransition) {
+        commitShapeTransition();
+      }
+
+      if (shapeName === activeShapeName) {
+        uniforms.uPlaneInfluence.value = shapeName === "plane" ? 1 : 0;
+        if (applyDefaults) {
+          startVisualTransition(SHAPE_VISUAL_DEFAULTS[shapeName], duration);
+        }
+        return;
+      }
+
+      const targetAttribute = particleField.geometry.getAttribute("aTargetPosition");
+      targetAttribute.array.set(createShapePositions(shapeName, MAX_PARTICLE_COUNT));
+      targetAttribute.needsUpdate = true;
       ui.shapeSelect.value = shapeName;
+      uniforms.uShapeMix.value = 0;
+      shapeTransition = {
+        toShape: shapeName,
+        fromPlane: uniforms.uPlaneInfluence.value,
+        toPlane: shapeName === "plane" ? 1 : 0,
+        progress: 0,
+        duration
+      };
+
+      if (applyDefaults) {
+        startVisualTransition(SHAPE_VISUAL_DEFAULTS[shapeName], duration);
+      }
+    }
+
+    function updateShapeTransition(delta) {
+      if (!shapeTransition) {
+        return;
+      }
+
+      shapeTransition.progress = Math.min(
+        1,
+        shapeTransition.progress + delta / shapeTransition.duration
+      );
+      const amount = easeTransition(shapeTransition.progress);
+      uniforms.uShapeMix.value = amount;
+      uniforms.uPlaneInfluence.value = THREE.MathUtils.lerp(
+        shapeTransition.fromPlane,
+        shapeTransition.toPlane,
+        amount
+      );
+
+      if (shapeTransition.progress >= 1) {
+        const positionAttribute = particleField.geometry.getAttribute("position");
+        const targetAttribute = particleField.geometry.getAttribute("aTargetPosition");
+        positionAttribute.array.set(targetAttribute.array);
+        positionAttribute.needsUpdate = true;
+        activeShapeName = shapeTransition.toShape;
+        uniforms.uShapeMix.value = 0;
+        uniforms.uPlaneInfluence.value = shapeTransition.toPlane;
+        shapeTransition = null;
+      }
+    }
+
+    function updateAutoShape(delta) {
+      if (!settings.visuals.autoShape || shapeTransition || visualTransition) {
+        return;
+      }
+
+      autoShapeElapsed += delta;
+      if (autoShapeElapsed < settings.timing.shapeKeep) {
+        return;
+      }
+
+      const nextShape = chooseRandomOther(SHAPE_ORDER, activeShapeName);
+      autoShapeElapsed = 0;
+      startShapeTransition(nextShape, true, settings.timing.shapeTransition);
     }
 
     function updateSlider(name) {
@@ -683,16 +843,42 @@
       ui.sliderValues[name].textContent = `${value.toFixed(2)}x`;
     }
 
+    function updateTimingSlider(name) {
+      const value = Number(ui.timingSliders[name].value);
+      settings.timing[name] = value;
+      ui.timingSliderValues[name].textContent = `${value.toFixed(1)}s`;
+    }
+
+    function updateAutomationTimingVisibility() {
+      const shapeTimingVisible = settings.visuals.autoShape;
+      const atmosphereTimingVisible = settings.visuals.autoAtmosphere;
+      ui.shapeTimingControls.hidden = !shapeTimingVisible;
+      ui.shapeTimingControls.setAttribute("aria-hidden", String(!shapeTimingVisible));
+      ui.atmosphereTimingControls.hidden = !atmosphereTimingVisible;
+      ui.atmosphereTimingControls.setAttribute("aria-hidden", String(!atmosphereTimingVisible));
+    }
+
     function formatParticleCount(value) {
       return Math.round(value).toLocaleString("en-US");
     }
 
-    function updateVisualSlider(name) {
-      const value = Number(ui.visualSliders[name].value);
+    function updateParticleDrawRange() {
+      const drawLimit = visualTransition
+        ? Math.max(visualTransition.from.particleCount, visualTransition.to.particleCount)
+        : settings.visuals.particleCount;
+      particleField.geometry.setDrawRange(
+        0,
+        Math.min(MAX_PARTICLE_COUNT, Math.ceil(drawLimit))
+      );
+    }
+
+    function setVisualValue(name, value) {
       settings.visuals[name] = value;
+      ui.visualSliders[name].value = String(value);
 
       if (name === "particleCount") {
-        particleField.geometry.setDrawRange(0, Math.round(value));
+        uniforms.uParticleCount.value = value;
+        updateParticleDrawRange();
         ui.visualSliderValues[name].textContent = formatParticleCount(value);
         ui.particleCountValue.textContent = formatParticleCount(value);
       } else if (name === "particleSize") {
@@ -706,16 +892,57 @@
       }
     }
 
-    function applyVisualDefaults(shapeName) {
+    function updateVisualSlider(name) {
+      setVisualValue(name, Number(ui.visualSliders[name].value));
+    }
+
+    function startVisualTransition(targetValues, duration = SHAPE_TRANSITION_DURATION) {
+      const fromValues = {};
+      Object.keys(DEFAULT_VISUALS).forEach((name) => {
+        fromValues[name] = settings.visuals[name];
+      });
+      visualTransition = {
+        from: fromValues,
+        to: { ...targetValues },
+        progress: 0,
+        duration
+      };
+      updateParticleDrawRange();
+    }
+
+    function updateVisualTransition(delta) {
+      if (!visualTransition) {
+        return;
+      }
+
+      visualTransition.progress = Math.min(
+        1,
+        visualTransition.progress + delta / visualTransition.duration
+      );
+      const amount = easeTransition(visualTransition.progress);
+      Object.keys(DEFAULT_VISUALS).forEach((name) => {
+        setVisualValue(
+          name,
+          THREE.MathUtils.lerp(visualTransition.from[name], visualTransition.to[name], amount)
+        );
+      });
+
+      if (visualTransition.progress >= 1) {
+        Object.keys(DEFAULT_VISUALS).forEach((name) => {
+          setVisualValue(name, visualTransition.to[name]);
+        });
+        visualTransition = null;
+        updateParticleDrawRange();
+      }
+    }
+
+    function startVisualDefaultsTransition(shapeName, duration = SHAPE_TRANSITION_DURATION) {
       const defaults = SHAPE_VISUAL_DEFAULTS[shapeName];
       if (!defaults) {
         return;
       }
 
-      Object.entries(defaults).forEach(([name, value]) => {
-        ui.visualSliders[name].value = String(value);
-        updateVisualSlider(name);
-      });
+      startVisualTransition(defaults, duration);
     }
 
     function resetSliders() {
@@ -727,7 +954,7 @@
     }
 
     function resetVisuals() {
-      applyVisualDefaults(ui.shapeSelect.value);
+      startVisualDefaultsTransition(ui.shapeSelect.value, 0.7);
       setNotice("Visual controls reset to the defaults for the current shape.");
     }
 
@@ -737,18 +964,43 @@
     });
 
     Object.keys(ui.visualSliders).forEach((name) => {
-      ui.visualSliders[name].addEventListener("input", () => updateVisualSlider(name));
+      ui.visualSliders[name].addEventListener("input", () => {
+        visualTransition = null;
+        updateParticleDrawRange();
+        updateVisualSlider(name);
+      });
       updateVisualSlider(name);
+    });
+
+    Object.keys(ui.timingSliders).forEach((name) => {
+      ui.timingSliders[name].addEventListener("input", () => updateTimingSlider(name));
+      updateTimingSlider(name);
     });
 
     ui.resetSliders.addEventListener("click", resetSliders);
     ui.resetVisuals.addEventListener("click", resetVisuals);
     ui.shapeSelect.addEventListener("change", () => {
       const shapeName = ui.shapeSelect.value;
-      applyShape(shapeName);
-      applyVisualDefaults(shapeName);
+      if (settings.visuals.autoShape) {
+        settings.visuals.autoShape = false;
+        ui.autoShape.checked = false;
+        autoShapeElapsed = 0;
+        updateAutomationTimingVisibility();
+      }
+      startShapeTransition(shapeName);
       const shapeLabel = ui.shapeSelect.options[ui.shapeSelect.selectedIndex].textContent;
-      setNotice(`Field shape changed to ${shapeLabel}; its visual defaults were applied.`);
+      setNotice(`Field shape changed to ${shapeLabel}; its visual defaults are transitioning.`);
+    });
+
+    ui.autoShape.addEventListener("change", () => {
+      settings.visuals.autoShape = ui.autoShape.checked;
+      autoShapeElapsed = 0;
+      updateAutomationTimingVisibility();
+      setNotice(
+        settings.visuals.autoShape
+          ? "Auto shape enabled. The next form will be chosen randomly; use the revealed timing sliders to tune it."
+          : "Auto shape disabled. The current form will remain selected."
+      );
     });
 
     ui.panelToggle.addEventListener("click", () => {
@@ -761,6 +1013,7 @@
         if (settings.visuals.autoAtmosphere) {
           settings.visuals.autoAtmosphere = false;
           ui.autoAtmosphere.checked = false;
+          updateAutomationTimingVisibility();
         }
         applyTheme(button.dataset.theme);
       });
@@ -768,9 +1021,11 @@
 
     ui.autoAtmosphere.addEventListener("change", () => {
       settings.visuals.autoAtmosphere = ui.autoAtmosphere.checked;
+      updateAutomationTimingVisibility();
       if (settings.visuals.autoAtmosphere) {
-        atmospherePhase = THEME_ORDER.indexOf(activeThemeName);
-        setNotice("Auto atmosphere enabled. Theme colors will transition continuously.");
+        atmosphereTargetThemeName = chooseRandomOther(THEME_ORDER, activeThemeName);
+        atmosphereElapsed = 0;
+        setNotice("Auto atmosphere enabled. The next theme will be chosen randomly; use the revealed timing sliders to tune it.");
       } else {
         applyTheme(activeThemeName);
         setNotice("Auto atmosphere disabled. The selected theme is fixed.");
@@ -832,6 +1087,9 @@
       pulseTime += visualDelta * (0.8 + settings.audio.bass * 4.5);
 
       updateAudioAnalysis(delta);
+      updateShapeTransition(delta);
+      updateVisualTransition(delta);
+      updateAutoShape(delta);
       updateAtmosphere(delta);
       uniforms.uTime.value = visualTime;
       uniforms.uScale.value =
@@ -856,6 +1114,7 @@
     }
 
     applyTheme("cyberpunk");
+    updateAutomationTimingVisibility();
     setPanelVisibility(true);
     resize();
     updateCaptureButtons();
