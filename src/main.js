@@ -18,6 +18,16 @@
       motion: 1,
       glow: 1
     });
+    const SHAPE_VISUAL_DEFAULTS = Object.freeze({
+      sphere: Object.freeze({ ...DEFAULT_VISUALS }),
+      plane: Object.freeze({
+        particleCount: 16000,
+        particleSize: 0.5,
+        motion: 1,
+        glow: 0.4
+      }),
+      torus: Object.freeze({ ...DEFAULT_VISUALS })
+    });
     const DEFAULT_SHAPE = "sphere";
     const SHAPE_VALUES = Object.freeze({
       sphere: 0,
@@ -653,7 +663,7 @@
     }
 
     function applyShape(shapeName) {
-      if (!["sphere", "plane", "torus"].includes(shapeName)) {
+      if (!Object.prototype.hasOwnProperty.call(SHAPE_VALUES, shapeName)) {
         return;
       }
 
@@ -694,6 +704,18 @@
       }
     }
 
+    function applyVisualDefaults(shapeName) {
+      const defaults = SHAPE_VISUAL_DEFAULTS[shapeName];
+      if (!defaults) {
+        return;
+      }
+
+      Object.entries(defaults).forEach(([name, value]) => {
+        ui.visualSliders[name].value = String(value);
+        updateVisualSlider(name);
+      });
+    }
+
     function resetSliders() {
       Object.entries(DEFAULT_SENSITIVITY).forEach(([name, value]) => {
         ui.sliders[name].value = String(value);
@@ -703,16 +725,8 @@
     }
 
     function resetVisuals() {
-      Object.entries(DEFAULT_VISUALS).forEach(([name, value]) => {
-        ui.visualSliders[name].value = String(value);
-        updateVisualSlider(name);
-      });
-      ui.shapeSelect.value = DEFAULT_SHAPE;
-      applyShape(DEFAULT_SHAPE);
-      ui.autoAtmosphere.checked = false;
-      settings.visuals.autoAtmosphere = false;
-      applyTheme(activeThemeName);
-      setNotice("Particle count and visual controls reset to their defaults.");
+      applyVisualDefaults(ui.shapeSelect.value);
+      setNotice("Visual controls reset to the defaults for the current shape.");
     }
 
     Object.keys(ui.sliders).forEach((name) => {
@@ -728,9 +742,11 @@
     ui.resetSliders.addEventListener("click", resetSliders);
     ui.resetVisuals.addEventListener("click", resetVisuals);
     ui.shapeSelect.addEventListener("change", () => {
-      applyShape(ui.shapeSelect.value);
+      const shapeName = ui.shapeSelect.value;
+      applyShape(shapeName);
+      applyVisualDefaults(shapeName);
       const shapeLabel = ui.shapeSelect.options[ui.shapeSelect.selectedIndex].textContent;
-      setNotice(`Field shape changed to ${shapeLabel}.`);
+      setNotice(`Field shape changed to ${shapeLabel}; its visual defaults were applied.`);
     });
 
     ui.panelToggle.addEventListener("click", () => {

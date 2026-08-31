@@ -21,6 +21,7 @@ The visualizer captures live browser tab or system audio, analyzes bass, mid, an
 - Hideable controls panel with a persistent show button
 - Sphere, vertical circular plane, and torus particle field shapes
 - The circular plane contracts to a central vertical line in silence and activates from the center as audio rises
+- The vertical circular plane uses lighter defaults: 16,000 particles, 0.5x size, 1x motion, and 0.4x glow
 - Optional automatic atmosphere mode for continuous palette transitions
 - Optional audio monitoring with an echo-prevention toggle
 - Live capture status and FPS indicators
@@ -61,7 +62,7 @@ The page loads Three.js and its post-processing modules from jsDelivr, so an int
 5. Adjust **Particles**, **Size**, **Motion**, and **Glow** to tune the visual output.
 6. Choose a **Sphere**, **Vertical circular plane**, or **Torus vortex** field shape.
 7. Enable **Auto atmosphere** to smoothly transition between the theme palettes, or choose a fixed theme.
-8. Use **Reset sliders** or **Reset visuals** to restore their default values.
+8. Use **Reset sliders** or **Reset visuals** to restore their numeric defaults; **Reset visuals** uses the current shape's defaults and preserves both shape and atmosphere mode.
 9. Drag the particle field to orbit it.
 
 The **Monitor captured audio** option routes the captured stream back to the speakers. Disable it if the browser is already playing the source locally and you hear an echo. Disabling monitoring does not stop analysis.
