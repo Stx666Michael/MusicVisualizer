@@ -15,15 +15,16 @@
     <header class="brand">
       <div class="eyebrow">WebGL audio instrument</div>
       <h1>Resonance Field</h1>
-      <p>Feed a live tab or system stream into a luminous field of up to 50,000 particles.</p>
+      <p>Feed a live tab, system, or microphone stream into a luminous field of up to 50,000 particles.</p>
     </header>
 
     <div class="control-row">
       <button class="button primary" id="startCapture" type="button">Capture Browser/System Audio</button>
+      <button class="button" id="startMicrophone" type="button">Use Microphone</button>
       <button class="button" id="stopCapture" type="button" disabled>Stop Capture</button>
     </div>
 
-    <p class="hint">Choose a tab or screen in the browser dialog and enable <strong>Share tab audio</strong> (or system audio) when offered.</p>
+    <p class="hint">Choose a tab or screen and enable <strong>Share tab audio</strong> (or system audio), or use the microphone and allow audio input permission when prompted.</p>
 
     <div class="audio-readout">
       <span class="audio-dot" id="audioDot" data-state="idle" aria-hidden="true"></span>
@@ -61,7 +62,7 @@
 
       <label class="monitor" for="monitorAudio">
         <input id="monitorAudio" type="checkbox">
-        <span><strong>Monitor captured audio</strong> Route the captured stream back to your speakers. Turn this off if your browser is already playing the tab locally and you hear an echo.</span>
+        <span><strong>Monitor input audio</strong> Route the selected audio input back to your speakers. Keep this off for microphone use to avoid feedback.</span>
       </label>
     </section>
 

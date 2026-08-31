@@ -7,6 +7,7 @@ The visualizer captures live browser tab or system audio, analyzes bass, mid, an
 ## Features
 
 - Live tab or system audio capture through `navigator.mediaDevices.getDisplayMedia`
+- Live microphone input through `navigator.mediaDevices.getUserMedia`
 - Bass, mid, and treble frequency analysis with frame-by-frame smoothing
 - Bass-driven cloud expansion, pulse movement, and impulse bursts
 - Mid-driven simplex-noise turbulence and structural displacement
@@ -25,13 +26,13 @@ The visualizer captures live browser tab or system audio, analyzes bass, mid, an
 - Optional Auto shape mode with random next-form selection and smooth particle/visual transitions
 - Auto shape Keep and Transition timing sliders revealed when that mode is enabled
 - Optional automatic atmosphere mode with random next-theme selection and configurable color Keep and Transition timing sliders
-- Optional audio monitoring with an echo-prevention toggle
+- Optional audio monitoring with an echo- and microphone-feedback-prevention toggle
 - Live capture status and FPS indicators
 - Responsive full-window rendering
 
 ## Running locally
 
-Browser screen and tab capture requires a secure context. Use `localhost` or HTTPS rather than opening the file directly with `file://`.
+Browser screen, tab, and microphone capture require a secure context. Use `localhost` or HTTPS rather than opening the file directly with `file://`.
 
 ### Python
 
@@ -57,18 +58,17 @@ The page loads Three.js and its post-processing modules from jsDelivr, so an int
 
 ## Using the visualizer
 
-1. Click **Capture Browser/System Audio**.
-2. Choose a browser tab or screen in the sharing dialog.
-3. Enable **Share tab audio** or the equivalent system-audio option.
-4. Use the **Bass**, **Mids**, and **Treble** sliders to adjust the response.
-5. Adjust **Particles**, **Size**, **Motion**, and **Glow** to tune the visual output.
-6. Choose a **Sphere**, **Vertical circular plane**, or **Torus vortex** field shape.
-7. Enable **Auto shape** to randomly move between the three forms using smooth geometry and visual transitions. Use the revealed **Keep** and **Transition** sliders to control its timing.
-8. Enable **Auto atmosphere** to randomly move between the theme palettes, then use its revealed **Keep** and **Transition** sliders to control color timing.
-9. Use **Reset sliders** or **Reset visuals** to restore their numeric defaults; **Reset visuals** uses the current shape's defaults and preserves shape and atmosphere modes.
-10. Drag the particle field to orbit it.
+1. Click **Capture Browser/System Audio**, choose a browser tab or screen, and enable **Share tab audio** or the equivalent system-audio option.
+2. Alternatively, click **Use Microphone** and allow microphone permission when prompted.
+3. Use the **Bass**, **Mids**, and **Treble** sliders to adjust the response.
+4. Adjust **Particles**, **Size**, **Motion**, and **Glow** to tune the visual output.
+5. Choose a **Sphere**, **Vertical circular plane**, or **Torus vortex** field shape.
+6. Enable **Auto shape** to randomly move between the three forms using smooth geometry and visual transitions. Use the revealed **Keep** and **Transition** sliders to control its timing.
+7. Enable **Auto atmosphere** to randomly move between the theme palettes, then use its revealed **Keep** and **Transition** sliders to control color timing.
+8. Use **Reset sliders** or **Reset visuals** to restore their numeric defaults; **Reset visuals** uses the current shape's defaults and preserves shape and atmosphere modes.
+9. Drag the particle field to orbit it.
 
-The **Monitor captured audio** option routes the captured stream back to the speakers. Disable it if the browser is already playing the source locally and you hear an echo. Disabling monitoring does not stop analysis.
+The **Monitor input audio** option routes the selected input back to the speakers. Disable it if the browser is already playing the source locally and you hear an echo; keep it disabled for microphone input unless you intentionally want live monitoring, because speakers can feed back into the microphone. Disabling monitoring does not stop analysis.
 
 Use **Hide panel** to clear the controls from the canvas. The floating **Show panel** button remains available so the controls can be restored.
 
@@ -90,8 +90,9 @@ The project intentionally has no build step. `src/main.js` loads the shader file
 
 ## Browser notes
 
-- Use a current desktop browser with `getDisplayMedia` and Web Audio API support.
+- Use a current desktop browser with `getDisplayMedia`, `getUserMedia`, and Web Audio API support.
 - Permission prompts and available audio options vary by browser and operating system.
 - Selecting a source without enabling its audio-sharing option produces a friendly no-audio notice.
+- Microphone input requires granting microphone permission and may be affected by the browser's input processing settings.
 - Canceling the permission dialog leaves the visualizer idle and ready for another attempt.
 - The screen-sharing video track is requested to satisfy the capture API, but it is not displayed; only its audio track is analyzed.

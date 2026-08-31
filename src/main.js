@@ -51,6 +51,7 @@
       shapeTimingControls: document.getElementById("shapeTimingControls"),
       atmosphereTimingControls: document.getElementById("atmosphereTimingControls"),
       autoAtmosphere: document.getElementById("autoAtmosphere"),
+      startMicrophone: document.getElementById("startMicrophone"),
       audioDot: document.getElementById("audioDot"),
       statusLabel: document.getElementById("statusLabel"),
       sourceLabel: document.getElementById("sourceLabel"),
@@ -136,6 +137,7 @@
     let monitorGain = null;
     let frequencyData = null;
     let captureBusy = false;
+    let captureSourceType = null;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -435,7 +437,9 @@
     }
 
     function updateCaptureButtons() {
-      ui.startCapture.disabled = captureBusy || Boolean(captureStream);
+      const captureUnavailable = captureBusy || Boolean(captureStream);
+      ui.startCapture.disabled = captureUnavailable;
+      ui.startMicrophone.disabled = captureUnavailable;
       ui.stopCapture.disabled = captureBusy || !captureStream;
     }
 
@@ -464,23 +468,44 @@
       return mediaDevices.getDisplayMedia({ video: true, audio: true });
     }
 
-    function classifyCaptureError(error) {
+    function requestMicrophoneAudio() {
+      return navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false
+      });
+    }
+
+    function classifyCaptureError(error, sourceType) {
       const errorName = error && typeof error === "object" && "name" in error
         ? error.name
         : "";
 
       if (errorName === "NotAllowedError" || errorName === "AbortError") {
         return {
-          label: "Capture canceled",
-          message: "The sharing dialog was canceled. Choose a source and enable its tab or system audio option.",
+          label: sourceType === "microphone" ? "Microphone permission denied" : "Capture canceled",
+          message: sourceType === "microphone"
+            ? "Microphone permission was denied or canceled. Allow audio input access and try again."
+            : "The sharing dialog was canceled. Choose a source and enable its tab or system audio option.",
           tone: "warning"
         };
       }
 
       if (errorName === "NotFoundError") {
         return {
-          label: "No source selected",
-          message: "No shareable source was available. Try selecting a browser tab or a screen again.",
+          label: sourceType === "microphone" ? "No microphone found" : "No source selected",
+          message: sourceType === "microphone"
+            ? "No microphone input device was found. Connect a microphone and try again."
+            : "No shareable source was available. Try selecting a browser tab or a screen again.",
+          tone: "warning"
+        };
+      }
+
+      if (errorName === "NotReadableError") {
+        return {
+          label: sourceType === "microphone" ? "Microphone unavailable" : "Capture unavailable",
+          message: sourceType === "microphone"
+            ? "The microphone is busy or unavailable. Close other apps using it and try again."
+            : "The selected audio source could not be read. Try choosing it again.",
           tone: "warning"
         };
       }
@@ -489,26 +514,35 @@
         ? ` ${error.message}`
         : "";
       return {
-        label: "Capture error",
-        message: `The audio stream could not be started.${detail}`,
+        label: sourceType === "microphone" ? "Microphone error" : "Capture error",
+        message: `${sourceType === "microphone" ? "The microphone stream" : "The audio stream"} could not be started.${detail}`,
         tone: "error"
       };
     }
 
-    async function startCapture() {
+    async function startAudioCapture(sourceType) {
       if (captureBusy || captureStream) {
         return;
       }
 
       if (!window.isSecureContext) {
         setAudioStatus("error", "Secure context required");
-        setNotice("Screen and tab capture requires HTTPS or localhost. Serve this file from a local web server and try again.", "error");
+        setNotice("Audio capture requires HTTPS or localhost. Serve this file from a local web server and try again.", "error");
         return;
       }
 
-      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== "function") {
+      const mediaDevices = navigator.mediaDevices;
+      const captureMethod = sourceType === "microphone"
+        ? mediaDevices && mediaDevices.getUserMedia
+        : mediaDevices && mediaDevices.getDisplayMedia;
+      if (!mediaDevices || typeof captureMethod !== "function") {
         setAudioStatus("error", "Capture unavailable");
-        setNotice("This browser does not expose getDisplayMedia. Use a current desktop browser with screen-capture support.", "error");
+        setNotice(
+          sourceType === "microphone"
+            ? "This browser does not expose microphone capture. Use a current browser with Web Audio input support."
+            : "This browser does not expose getDisplayMedia. Use a current desktop browser with screen-capture support.",
+          "error"
+        );
         return;
       }
 
@@ -521,8 +555,15 @@
 
       captureBusy = true;
       updateCaptureButtons();
-      setAudioStatus("busy", "Waiting for source selection");
-      setNotice("Select a tab or screen, then enable Share tab audio or system audio in the browser dialog.");
+      setAudioStatus(
+        "busy",
+        sourceType === "microphone" ? "Waiting for microphone permission" : "Waiting for source selection"
+      );
+      setNotice(
+        sourceType === "microphone"
+          ? "Allow microphone access when your browser asks for permission."
+          : "Select a tab or screen, then enable Share tab audio or system audio in the browser dialog."
+      );
 
       let pendingStream = null;
       let pendingContext = null;
@@ -531,14 +572,21 @@
       let pendingMonitor = null;
 
       try {
-        pendingStream = await requestDisplayAudio();
+        pendingStream = sourceType === "microphone"
+          ? await requestMicrophoneAudio()
+          : await requestDisplayAudio();
         const audioTracks = pendingStream.getAudioTracks();
 
         if (audioTracks.length === 0) {
           pendingStream.getTracks().forEach((track) => track.stop());
           pendingStream = null;
           setAudioStatus("error", "No audio track");
-          setNotice("The source was shared without audio. Start again and enable Share tab audio (or system audio) before confirming.", "warning");
+          setNotice(
+            sourceType === "microphone"
+              ? "The microphone did not provide an audio track. Check the selected input and permissions, then try again."
+              : "The source was shared without audio. Start again and enable Share tab audio (or system audio) before confirming.",
+            "warning"
+          );
           return;
         }
 
@@ -565,6 +613,7 @@
         mediaSource = pendingSource;
         analyser = pendingAnalyser;
         monitorGain = pendingMonitor;
+        captureSourceType = sourceType;
         frequencyData = new Uint8Array(analyser.frequencyBinCount);
         pendingStream = null;
         pendingContext = null;
@@ -577,8 +626,16 @@
         });
 
         const sourceDescription = audioTracks[0].label || "Captured audio track";
-        setAudioStatus("ready", "Live audio reactive", sourceDescription);
-        setNotice("Audio is live. Bass expands the field, mids bend its structure, and treble adds jitter and light.");
+        setAudioStatus(
+          "ready",
+          sourceType === "microphone" ? "Live microphone reactive" : "Live audio reactive",
+          sourceDescription
+        );
+        setNotice(
+          sourceType === "microphone"
+            ? "Microphone input is live. Keep monitoring muted unless you intentionally need to hear the input."
+            : "Audio is live. Bass expands the field, mids bend its structure, and treble adds jitter and light."
+        );
       } catch (error) {
         if (pendingStream) {
           pendingStream.getTracks().forEach((track) => track.stop());
@@ -596,7 +653,7 @@
           await pendingContext.close();
         }
 
-        const failure = classifyCaptureError(error);
+        const failure = classifyCaptureError(error, sourceType);
         setAudioStatus("error", failure.label);
         setNotice(failure.message, failure.tone);
         if (failure.tone === "error") {
@@ -621,6 +678,7 @@
       analyser = null;
       monitorGain = null;
       frequencyData = null;
+      captureSourceType = null;
 
       if (sourceToDisconnect) {
         sourceToDisconnect.disconnect();
@@ -655,7 +713,11 @@
 
       const ended = captureStream.getTracks().some((track) => track.readyState === "ended");
       if (ended) {
-        void stopCapture("Browser/system audio sharing ended. Start a new capture whenever you are ready.");
+        void stopCapture(
+          captureSourceType === "microphone"
+            ? "Microphone input ended. Start it again whenever you are ready."
+            : "Browser/system audio sharing ended. Start a new capture whenever you are ready."
+        );
       }
     }
 
@@ -1049,7 +1111,11 @@
     });
 
     ui.startCapture.addEventListener("click", () => {
-      void startCapture();
+      void startAudioCapture("display");
+    });
+
+    ui.startMicrophone.addEventListener("click", () => {
+      void startAudioCapture("microphone");
     });
 
     ui.stopCapture.addEventListener("click", () => {
